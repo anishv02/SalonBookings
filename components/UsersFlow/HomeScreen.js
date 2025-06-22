@@ -1,4 +1,3 @@
-// screens/HomeScreen.js
 import React, { useState, useEffect } from "react";
 import {
   View,
@@ -11,54 +10,14 @@ import {
   TextInput,
   StatusBar,
   FlatList,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  PermissionsAndroid,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
-
-// Mock data for home professionals
-const PRO_CARE_PROFESSIONALS = [
-  {
-    id: "1",
-    name: "Bella Grace",
-    profession: "Hair Stylist",
-    rating: 4.9,
-    experience: "5 yrs exp",
-    image: { uri: "https://via.placeholder.com/60" }, // Using placeholder image
-  },
-  {
-    id: "2",
-    name: "Daisy Scarlett",
-    profession: "Hair Stylist",
-    rating: 4.8,
-    experience: "9 yrs exp",
-    image: { uri: "https://via.placeholder.com/60" }, // Using placeholder image
-  },
-];
-
-// Mock data for nearby salons
-const NEARBY_SALONS = [
-  {
-    id: "1",
-    name: "Cuts & Style",
-    image: { uri: "https://via.placeholder.com/120" }, // Using placeholder image
-    rating: 4.7,
-    distance: "0.8 mi",
-  },
-  {
-    id: "2",
-    name: "Hair Studio",
-    image: { uri: "https://via.placeholder.com/120" }, // Using placeholder image
-    rating: 4.5,
-    distance: "1.2 mi",
-  },
-  {
-    id: "3",
-    name: "Beauty Lounge",
-    image: { uri: "https://via.placeholder.com/120" }, // Using placeholder image
-    rating: 4.9,
-    distance: "0.5 mi",
-  },
-];
+import * as Location from "expo-location";
 
 // Categories data
 const CATEGORIES = [
@@ -69,9 +28,261 @@ const CATEGORIES = [
   { id: "5", name: "Makeup", icon: "magic" },
 ];
 
+// Helper function to calculate distance between two lat/lng points (Haversine formula)
+function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
+  const R = 6371; // Radius of the earth in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    0.5 -
+    Math.cos(dLat) / 2 +
+    (Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      (1 - Math.cos(dLon))) /
+      2;
+  return R * 2 * Math.asin(Math.sqrt(a));
+}
+
 const HomeScreen = () => {
   const navigation = useNavigation();
   const [userName, setUserName] = useState("John");
+  const [nearbySalons, setNearbySalons] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Location states
+  const [location, setLocation] = useState(null);
+  const [locationPermission, setLocationPermission] = useState(null);
+  const [locationLoading, setLocationLoading] = useState(false);
+  const [locationError, setLocationError] = useState(null);
+
+  // Request location permission
+  const requestLocationPermission = async () => {
+    try {
+      if (Platform.OS === "android") {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "Location Permission",
+            message:
+              "This app needs access to your location to find nearby salons.",
+            buttonNeutral: "Ask Me Later",
+            buttonNegative: "Cancel",
+            buttonPositive: "OK",
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } else {
+        // For iOS/Expo
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        return status === "granted";
+      }
+    } catch (err) {
+      console.warn("Error requesting location permission:", err);
+      return false;
+    }
+  };
+
+  // Get current location
+  const getCurrentLocation = async () => {
+    setLocationLoading(true);
+    setLocationError(null);
+
+    try {
+      // Check if location services are enabled
+      const locationServicesEnabled = await Location.hasServicesEnabledAsync();
+      if (!locationServicesEnabled) {
+        throw new Error(
+          "Location services are disabled. Please enable them in settings."
+        );
+      }
+
+      // Request permission
+      const hasPermission = await requestLocationPermission();
+      if (!hasPermission) {
+        throw new Error("Location permission denied");
+      }
+
+      setLocationPermission("granted");
+
+      // Get current position
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+        timeout: 15000,
+        maximumAge: 10000,
+      });
+
+      const locationData = {
+        latitude: currentLocation.coords.latitude,
+        longitude: currentLocation.coords.longitude,
+        timestamp: currentLocation.timestamp,
+      };
+
+      setLocation(locationData);
+
+      // Get address from coordinates (optional)
+      try {
+        const addressResponse = await Location.reverseGeocodeAsync({
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+        });
+
+        if (addressResponse.length > 0) {
+          const address = addressResponse[0];
+          locationData.address = {
+            city: address.city,
+            region: address.region,
+            country: address.country,
+            postalCode: address.postalCode,
+            street: address.street,
+          };
+          setLocation(locationData);
+        }
+      } catch (addressError) {
+        console.log("Could not get address:", addressError);
+      }
+
+      return locationData;
+    } catch (err) {
+      console.error("Error getting location:", err);
+      setLocationError(err.message);
+      setLocationPermission("denied");
+
+      // Show user-friendly error message
+      Alert.alert("Location Error", err.message, [
+        {
+          text: "Settings",
+          onPress: () => {
+            // You can open app settings here
+            console.log("Open app settings");
+          },
+        },
+        {
+          text: "Retry",
+          onPress: getCurrentLocation,
+        },
+        {
+          text: "Skip",
+          style: "cancel",
+          onPress: () => {
+            // Continue without location
+            fetchSalonData();
+          },
+        },
+      ]);
+      return null;
+    } finally {
+      setLocationLoading(false);
+    }
+  };
+
+  // Fetch salon data from API (updated to include location)
+  const fetchSalonData = async (userCoords) => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch("http://192.168.1.4:3000/getShopDetails");
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      let salonsData;
+      if (Array.isArray(data)) {
+        salonsData = data;
+      } else if (data && typeof data === "object" && data._id) {
+        salonsData = [data];
+      } else {
+        salonsData = data.salons || data.shops || [];
+      }
+      // Filter salons by distance if userCoords is available and salon has lat/lng
+      if (userCoords) {
+        // Try to get user's city from reverse geocoding
+        let userCity = userCoords.city;
+        if (
+          !userCity &&
+          userCoords.latitude &&
+          userCoords.longitude &&
+          Location.reverseGeocodeAsync
+        ) {
+          try {
+            const geo = await Location.reverseGeocodeAsync({
+              latitude: userCoords.latitude,
+              longitude: userCoords.longitude,
+            });
+            if (geo && geo[0] && geo[0].city) {
+              userCity = geo[0].city;
+            }
+          } catch (e) {
+            userCity = undefined;
+          }
+        }
+        salonsData = salonsData.filter((salon) => {
+          // If salon has lat/lng, check distance
+          if (salon.latitude && salon.longitude) {
+            const dist = getDistanceFromLatLonInKm(
+              userCoords.latitude,
+              userCoords.longitude,
+              salon.latitude,
+              salon.longitude
+            );
+            if (dist >= 10 && dist <= 15) return true;
+          }
+          // If city matches (case-insensitive), also include
+          if (
+            salon.city &&
+            userCity &&
+            salon.city.toLowerCase() === userCity.toLowerCase()
+          ) {
+            return true;
+          }
+          return false;
+        });
+      }
+      setNearbySalons(salonsData);
+    } catch (err) {
+      console.error("Error fetching salon data:", err);
+      setError(err.message);
+      Alert.alert(
+        "Error",
+        "Failed to load salon data. Please check your connection and try again.",
+        [
+          { text: "Retry", onPress: fetchSalonData },
+          { text: "Cancel", style: "cancel" },
+        ]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initialize location and data on component mount
+  useEffect(() => {
+    const initializeApp = async () => {
+      // First, try to get location
+      const userLocation = await getCurrentLocation();
+
+      // Then fetch salon data with or without location
+      await fetchSalonData(userLocation);
+    };
+
+    initializeApp();
+  }, []);
+
+  // Fetch user location and salons on mount
+  useEffect(() => {
+    (async () => {
+      let { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        console.log("Permission to access location was denied");
+        fetchSalonData();
+        return;
+      }
+      let location = await Location.getCurrentPositionAsync({});
+      console.log("User location:", location);
+      fetchSalonData(location.coords);
+    })();
+  }, []);
 
   // Render category item
   const renderCategoryItem = ({ item }) => (
@@ -83,44 +294,115 @@ const HomeScreen = () => {
     </TouchableOpacity>
   );
 
-  // Render pro care professional card
-  const renderProCard = ({ item }) => (
-    <TouchableOpacity style={styles.proCard}>
-      <Image source={item.image} style={styles.proImage} />
-      <Text style={styles.proName}>{item.name}</Text>
-      <Text style={styles.proProfession}>{item.profession}</Text>
-      <View style={styles.proInfoRow}>
-        <View style={styles.ratingContainer}>
-          <Ionicons name="star" size={14} color="#FFD700" />
-          <Text style={styles.ratingText}>{item.rating}</Text>
-        </View>
-        <Text style={styles.experienceText}>{item.experience}</Text>
-      </View>
-    </TouchableOpacity>
-  );
-
-  // Render nearby salon card
+  // Render nearby salon card - Updated with distance
   const renderNearbyCard = ({ item }) => (
     <TouchableOpacity
       style={styles.nearbyCard}
       onPress={() =>
         navigation.navigate("SalonDetail", {
-          salonId: item.id,
-          salonName: item.name,
+          salonId: item._id,
+          salonName: item.shopName,
+          salonData: item,
         })
       }
     >
-      <Image source={item.image} style={styles.nearbyImage} />
+      <Image
+        source={{ uri: "https://via.placeholder.com/160x100?text=Salon" }}
+        style={styles.nearbyImage}
+      />
       <View style={styles.nearbyInfo}>
-        <Text style={styles.nearbyName}>{item.name}</Text>
-        <View style={styles.nearbyRating}>
-          <Ionicons name="star" size={14} color="#FFD700" />
-          <Text style={styles.nearbyRatingText}>{item.rating}</Text>
-          <Text style={styles.nearbyDistance}>{item.distance}</Text>
+        <Text style={styles.nearbyName} numberOfLines={1}>
+          {item.shopName}
+        </Text>
+        <View style={styles.nearbyLocationRow}>
+          <Ionicons name="location-outline" size={12} color="#666" />
+          <Text style={styles.nearbyLocation} numberOfLines={1}>
+            {item.city}, {item.state}
+          </Text>
+        </View>
+        <Text style={styles.nearbyAddress} numberOfLines={1}>
+          {item.address}
+        </Text>
+        <View style={styles.nearbyBottomRow}>
+          <View style={styles.nearbyRating}>
+            <Ionicons name="star" size={12} color="#FFD700" />
+            <Text style={styles.nearbyRatingText}>{item.rating || "4.5"}</Text>
+          </View>
+          <Text style={styles.nearbyDistance}>
+            {item.distance ? `${item.distance} km` : "2.5 km"}
+          </Text>
         </View>
       </View>
     </TouchableOpacity>
   );
+
+  // Render loading state for nearby salons
+  const renderSalonLoading = () => (
+    <View style={styles.loadingContainer}>
+      <ActivityIndicator size="small" color="#9370DB" />
+      <Text style={styles.loadingText}>Loading salons...</Text>
+    </View>
+  );
+
+  // Render error state for nearby salons
+  const renderSalonError = () => (
+    <View style={styles.errorContainer}>
+      <Text style={styles.errorText}>Failed to load salons</Text>
+      <TouchableOpacity
+        style={styles.retryButton}
+        onPress={() => fetchSalonData(location)}
+      >
+        <Text style={styles.retryButtonText}>Retry</Text>
+      </TouchableOpacity>
+    </View>
+  );
+
+  // Render location status
+  const renderLocationStatus = () => {
+    if (locationLoading) {
+      return (
+        <View style={styles.locationStatus}>
+          <ActivityIndicator size="small" color="#9370DB" />
+          <Text style={styles.locationStatusText}>
+            Getting your location...
+          </Text>
+        </View>
+      );
+    }
+
+    if (locationError) {
+      return (
+        <View style={styles.locationStatus}>
+          <TouchableOpacity
+            style={styles.locationRetryButton}
+            onPress={getCurrentLocation}
+          >
+            <Ionicons name="location-outline" size={16} color="#9370DB" />
+            <Text style={styles.locationRetryText}>Enable Location</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (location) {
+      return (
+        <View style={styles.locationStatus}>
+          <Ionicons name="location" size={16} color="#4CAF50" />
+          <Text style={styles.locationStatusText}>
+            {location.address
+              ? location.address.name ||
+                location.address.street ||
+                location.address.neighborhood ||
+                location.address.subregion ||
+                `${location.address.city}, ${location.address.region}`
+              : "Location enabled"}
+          </Text>
+        </View>
+      );
+    }
+
+    return null;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -131,6 +413,7 @@ const HomeScreen = () => {
         <View>
           <Text style={styles.greetingText}>Hello {userName}!</Text>
           <Text style={styles.welcomeText}>Good Morning!</Text>
+          {renderLocationStatus()}
         </View>
         <TouchableOpacity style={styles.notificationButton}>
           <Ionicons name="notifications-outline" size={24} color="black" />
@@ -149,7 +432,9 @@ const HomeScreen = () => {
             color="#999"
             style={styles.searchIcon}
           />
-          <Text style={styles.searchPlaceholder}>Search</Text>
+          <Text style={styles.searchPlaceholder}>
+            Search salons near you...
+          </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.filterButton}>
           <Ionicons name="options-outline" size={20} color="#000" />
@@ -184,46 +469,44 @@ const HomeScreen = () => {
                 <Text style={styles.offerButtonText}>Get Offer Now</Text>
               </TouchableOpacity>
             </View>
-            {/* <Image
-              source={require("../assets/images/haircut-offer.png")}
-              style={styles.offerImage}
-              resizeMode="contain"
-            /> */}
           </View>
         </View>
 
-        {/* Pro Care at Home Section */}
+        {/* Nearby Salons Section - Updated */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Pro Care at Home</Text>
+            <Text style={styles.sectionTitle}>
+              {location ? "Nearby Salons" : "Salons"}
+            </Text>
             <TouchableOpacity>
               <Text style={styles.seeAllText}>See all</Text>
             </TouchableOpacity>
           </View>
-          <FlatList
-            data={PRO_CARE_PROFESSIONALS}
-            renderItem={renderProCard}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          />
-        </View>
 
-        {/* Nearby Salons Section */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Nearby Salons</Text>
-            <TouchableOpacity>
-              <Text style={styles.seeAllText}>See all</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={NEARBY_SALONS}
-            renderItem={renderNearbyCard}
-            keyExtractor={(item) => item.id}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-          />
+          {loading ? (
+            renderSalonLoading()
+          ) : error ? (
+            renderSalonError()
+          ) : nearbySalons.length > 0 ? (
+            <FlatList
+              data={nearbySalons}
+              renderItem={renderNearbyCard}
+              keyExtractor={(item) => item._id}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.salonsList}
+            />
+          ) : (
+            <View style={styles.noDataContainer}>
+              <Text style={styles.noDataText}>No salons available nearby</Text>
+              <TouchableOpacity
+                style={styles.refreshButton}
+                onPress={() => fetchSalonData(location)}
+              >
+                <Text style={styles.refreshButtonText}>Refresh</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
       </ScrollView>
 
@@ -289,6 +572,31 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F0F0F0",
   },
+  // Location status styles
+  locationStatus: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  locationStatusText: {
+    fontSize: 12,
+    color: "#4CAF50",
+    marginLeft: 4,
+  },
+  locationRetryButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 12,
+  },
+  locationRetryText: {
+    fontSize: 12,
+    color: "#9370DB",
+    marginLeft: 4,
+    fontWeight: "500",
+  },
   searchContainer: {
     flexDirection: "row",
     paddingHorizontal: 20,
@@ -307,11 +615,10 @@ const styles = StyleSheet.create({
   searchIcon: {
     marginRight: 8,
   },
-  searchInput: {
+  searchPlaceholder: {
     flex: 1,
-    height: 40,
     fontSize: 14,
-    color: "#333",
+    color: "#999",
   },
   filterButton: {
     width: 40,
@@ -363,7 +670,8 @@ const styles = StyleSheet.create({
   },
   seeAllText: {
     fontSize: 14,
-    color: "#999",
+    color: "#9370DB",
+    fontWeight: "500",
   },
   offerCard: {
     backgroundColor: "#9370DB",
@@ -407,103 +715,131 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     fontSize: 12,
   },
-  offerImage: {
-    width: 100,
-    height: 120,
+  salonsList: {
+    paddingRight: 20,
   },
-  proCard: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 10,
-    width: 120,
-    marginRight: 15,
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 5,
-    elevation: 3,
-  },
-  proImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginBottom: 8,
-  },
-  proName: {
-    fontSize: 14,
-    fontWeight: "bold",
-    color: "#333",
-    textAlign: "center",
-  },
-  proProfession: {
-    fontSize: 12,
-    color: "#999",
-    textAlign: "center",
-    marginBottom: 5,
-  },
-  proInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    width: "100%",
-    paddingHorizontal: 5,
-  },
-  ratingContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  ratingText: {
-    fontSize: 12,
-    color: "#333",
-    marginLeft: 2,
-  },
-  experienceText: {
-    fontSize: 11,
-    color: "#999",
-  },
+  // Updated Nearby Salon Card Styles
   nearbyCard: {
     backgroundColor: "#fff",
-    borderRadius: 10,
+    borderRadius: 12,
     marginRight: 15,
-    width: 120,
-    height: 120,
-    overflow: "hidden",
+    width: 160,
     shadowColor: "#000",
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.08,
     shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 5,
-    elevation: 3,
+    shadowRadius: 8,
+    elevation: 4,
+    overflow: "hidden",
   },
   nearbyImage: {
     width: "100%",
-    height: "100%",
+    height: 100,
+    backgroundColor: "#f0f0f0",
   },
   nearbyInfo: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    padding: 8,
+    padding: 10,
   },
   nearbyName: {
-    color: "#fff",
     fontSize: 14,
-    fontWeight: "bold",
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 4,
+    lineHeight: 18,
+  },
+  nearbyLocationRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  nearbyLocation: {
+    fontSize: 11,
+    color: "#666",
+    marginLeft: 3,
+    flex: 1,
+  },
+  nearbyAddress: {
+    fontSize: 10,
+    color: "#999",
+    marginBottom: 8,
+    lineHeight: 14,
+  },
+  nearbyBottomRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   nearbyRating: {
     flexDirection: "row",
     alignItems: "center",
+    backgroundColor: "#f8f8f8",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
   nearbyRatingText: {
-    color: "#fff",
-    fontSize: 12,
-    marginLeft: 4,
-    marginRight: 8,
+    fontSize: 11,
+    color: "#333",
+    marginLeft: 2,
+    fontWeight: "500",
   },
   nearbyDistance: {
+    fontSize: 10,
+    color: "#9370DB",
+    fontWeight: "500",
+  },
+  // Loading and error states
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 30,
+  },
+  loadingText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: "#999",
+  },
+  errorContainer: {
+    alignItems: "center",
+    padding: 30,
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: "#9370DB",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
     color: "#fff",
-    fontSize: 12,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  noDataContainer: {
+    alignItems: "center",
+    padding: 30,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 15,
+    textAlign: "center",
+  },
+  refreshButton: {
+    backgroundColor: "#f0f0f0",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  refreshButtonText: {
+    color: "#9370DB",
+    fontSize: 14,
+    fontWeight: "600",
   },
   bottomTabBar: {
     flexDirection: "row",
@@ -518,11 +854,6 @@ const styles = StyleSheet.create({
   },
   activeTab: {
     borderTopColor: "#9370DB",
-  },
-  searchPlaceholder: {
-    flex: 1,
-    fontSize: 14,
-    color: "#999",
   },
   tabText: {
     fontSize: 10,

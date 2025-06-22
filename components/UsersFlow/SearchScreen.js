@@ -1,5 +1,5 @@
 // screens/SearchScreen.js
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -14,28 +14,6 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
-
-// Mock data for recent bookings
-const RECENT_BOOKINGS = [
-  {
-    id: "1",
-    salonName: "Cuts & Style",
-    service: "Men's Haircut",
-    date: "15 Apr",
-  },
-  {
-    id: "2",
-    salonName: "Beauty Lounge",
-    service: "Facial Treatment",
-    date: "02 Apr",
-  },
-  {
-    id: "3",
-    salonName: "Hair Studio",
-    service: "Hair Coloring",
-    date: "23 Mar",
-  },
-];
 
 // Categories data (same as HomeScreen)
 const CATEGORIES = [
@@ -62,6 +40,30 @@ const POPULAR_SEARCHES = [
 const SearchScreen = () => {
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [recentBookings, setRecentBookings] = useState([]);
+
+  // Fetch recent bookings (salons) from API
+  useEffect(() => {
+    const fetchSalons = async () => {
+      try {
+        const response = await fetch("http://192.168.1.4:3000/getShopDetails");
+        const data = await response.json();
+        // If single object, wrap in array
+        let salonsData;
+        if (Array.isArray(data)) {
+          salonsData = data;
+        } else if (data && typeof data === "object" && data._id) {
+          salonsData = [data];
+        } else {
+          salonsData = data.salons || data.shops || [];
+        }
+        setRecentBookings(salonsData);
+      } catch (err) {
+        setRecentBookings([]);
+      }
+    };
+    fetchSalons();
+  }, []);
 
   // Handle search submission
   handleSearch = () => {
@@ -91,14 +93,14 @@ const SearchScreen = () => {
   );
 
   // Render recent booking item
-  // Render recent booking item
   const renderRecentBooking = ({ item }) => (
     <TouchableOpacity
       style={styles.recentBookingItem}
       onPress={() => {
         navigation.navigate("SalonDetail", {
-          salonId: item.id,
-          salonName: item.salonName,
+          salonId: item._id,
+          salonName: item.shopName,
+          salonData: item,
         });
       }}
     >
@@ -107,12 +109,12 @@ const SearchScreen = () => {
           <Ionicons name="calendar-outline" size={20} color="#9370DB" />
         </View>
         <View style={styles.recentBookingInfo}>
-          <Text style={styles.recentBookingSalon}>{item.salonName}</Text>
-          <Text style={styles.recentBookingService}>{item.service}</Text>
+          <Text style={styles.recentBookingSalon}>{item.shopName}</Text>
+          <Text style={styles.recentBookingService}>{item.salonType}</Text>
         </View>
       </View>
       <View style={styles.recentBookingDate}>
-        <Text style={styles.recentBookingDateText}>{item.date}</Text>
+        <Text style={styles.recentBookingDateText}>{item.city}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -170,9 +172,9 @@ const SearchScreen = () => {
             </TouchableOpacity>
           </View>
           <FlatList
-            data={RECENT_BOOKINGS}
+            data={recentBookings}
             renderItem={renderRecentBooking}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item) => item._id}
             scrollEnabled={false}
           />
         </View>
