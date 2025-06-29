@@ -8,9 +8,9 @@ import {
   TouchableOpacity,
   TextInput,
   FlatList,
-  Image,
   StatusBar,
   ScrollView,
+  Keyboard,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
@@ -40,15 +40,16 @@ const POPULAR_SEARCHES = [
 const SearchScreen = () => {
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState("");
-  const [recentBookings, setRecentBookings] = useState([]);
+  const [allSalons, setAllSalons] = useState([]);
+  const [searchResults, setSearchResults] = useState([]);
+  const [showDropdown, setShowDropdown] = useState(false);
 
-  // Fetch recent bookings (salons) from API
+  // Fetch all salons from API on mount
   useEffect(() => {
     const fetchSalons = async () => {
       try {
         const response = await fetch("http://192.168.1.4:3000/getShopDetails");
         const data = await response.json();
-        // If single object, wrap in array
         let salonsData;
         if (Array.isArray(data)) {
           salonsData = data;
@@ -57,31 +58,33 @@ const SearchScreen = () => {
         } else {
           salonsData = data.salons || data.shops || [];
         }
-        setRecentBookings(salonsData);
+        setAllSalons(salonsData);
       } catch (err) {
-        setRecentBookings([]);
+        setAllSalons([]);
       }
     };
     fetchSalons();
   }, []);
 
-  // Handle search submission
-  handleSearch = () => {
-    if (searchQuery.trim() !== "") {
-      // Navigate directly to salon detail for demo
-      navigation.navigate("SalonDetail", {
-        salonId: "1",
-        salonName: "Star Quality Cutz",
-      });
+  // Update search results as user types
+  useEffect(() => {
+    if (searchQuery.trim().length === 0) {
+      setSearchResults([]);
+      setShowDropdown(false);
+      return;
     }
-  };
+    const results = allSalons.filter((salon) =>
+      salon.shopName.toLowerCase().includes(searchQuery.trim().toLowerCase())
+    );
+    setSearchResults(results);
+    setShowDropdown(true);
+  }, [searchQuery, allSalons]);
 
   // Render category item
   const renderCategoryItem = ({ item }) => (
     <TouchableOpacity
       style={styles.categoryItem}
       onPress={() => {
-        console.log(`Selected category: ${item.name}`);
         // navigation.navigate("CategoryResults", { category: item.name });
       }}
     >
@@ -89,33 +92,6 @@ const SearchScreen = () => {
         <FontAwesome5 name={item.icon} size={18} color="#fff" />
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
-    </TouchableOpacity>
-  );
-
-  // Render recent booking item
-  const renderRecentBooking = ({ item }) => (
-    <TouchableOpacity
-      style={styles.recentBookingItem}
-      onPress={() => {
-        navigation.navigate("SalonDetail", {
-          salonId: item._id,
-          salonName: item.shopName,
-          salonData: item,
-        });
-      }}
-    >
-      <View style={styles.recentBookingContent}>
-        <View style={styles.recentBookingIconContainer}>
-          <Ionicons name="calendar-outline" size={20} color="#9370DB" />
-        </View>
-        <View style={styles.recentBookingInfo}>
-          <Text style={styles.recentBookingSalon}>{item.shopName}</Text>
-          <Text style={styles.recentBookingService}>{item.salonType}</Text>
-        </View>
-      </View>
-      <View style={styles.recentBookingDate}>
-        <Text style={styles.recentBookingDateText}>{item.city}</Text>
-      </View>
     </TouchableOpacity>
   );
 
@@ -131,30 +107,65 @@ const SearchScreen = () => {
         >
           <Ionicons name="arrow-back" size={24} color="black" />
         </TouchableOpacity>
-        <View style={styles.searchBar}>
-          <Ionicons
-            name="search"
-            size={20}
-            color="#999"
-            style={styles.searchIcon}
-          />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search salons or services"
-            placeholderTextColor="#999"
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            autoFocus={true}
-            returnKeyType="search"
-            onSubmitEditing={handleSearch}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity
-              style={styles.clearButton}
-              onPress={() => setSearchQuery("")}
-            >
-              <Ionicons name="close-circle" size={18} color="#999" />
-            </TouchableOpacity>
+        <View style={{ flex: 1 }}>
+          <View style={styles.searchBar}>
+            <Ionicons
+              name="search"
+              size={20}
+              color="#999"
+              style={styles.searchIcon}
+            />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search salons or services"
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus={true}
+              returnKeyType="search"
+              onFocus={() => setShowDropdown(true)}
+              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={() => setSearchQuery("")}
+              >
+                <Ionicons name="close-circle" size={18} color="#999" />
+              </TouchableOpacity>
+            )}
+          </View>
+          {showDropdown && searchResults.length > 0 && (
+            <View style={styles.searchDropdown}>
+              <FlatList
+                data={searchResults}
+                keyExtractor={(item) => item._id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.searchDropdownItem}
+                    onPress={() => {
+                      setShowDropdown(false);
+                      setSearchQuery("");
+                      Keyboard.dismiss();
+                      navigation.navigate("SalonDetail", {
+                        salonId: item._id,
+                        salonName: item.shopName,
+                        salonData: item,
+                      });
+                    }}
+                  >
+                    <Text style={styles.searchDropdownText}>
+                      {item.shopName}
+                    </Text>
+                    <Text style={styles.searchDropdownSubText}>
+                      {item.city}, {item.state}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+                style={{ maxHeight: 180 }}
+                keyboardShouldPersistTaps="handled"
+              />
+            </View>
           )}
         </View>
       </View>
@@ -163,22 +174,6 @@ const SearchScreen = () => {
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
       >
-        {/* Recent Bookings Section */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Bookings</Text>
-            <TouchableOpacity>
-              <Text style={styles.clearText}>Clear All</Text>
-            </TouchableOpacity>
-          </View>
-          <FlatList
-            data={recentBookings}
-            renderItem={renderRecentBooking}
-            keyExtractor={(item) => item._id}
-            scrollEnabled={false}
-          />
-        </View>
-
         {/* Popular Searches Section */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Popular Searches</Text>
@@ -189,7 +184,6 @@ const SearchScreen = () => {
                 style={styles.popularSearchItem}
                 onPress={() => {
                   setSearchQuery(item);
-                  handleSearch();
                 }}
               >
                 <Text style={styles.popularSearchText}>{item}</Text>
@@ -199,7 +193,7 @@ const SearchScreen = () => {
         </View>
 
         {/* Categories Section */}
-        <View style={styles.sectionContainer}>
+        <View className="sectionContainer">
           <Text style={styles.sectionTitle}>Filter by Category</Text>
           <View style={styles.categoriesGrid}>
             <FlatList
@@ -256,6 +250,36 @@ const styles = StyleSheet.create({
   clearButton: {
     padding: 5,
   },
+  searchDropdown: {
+    position: "absolute",
+    top: 44,
+    left: 0,
+    right: 0,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    shadowColor: "#000",
+    shadowOpacity: 0.08,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 4,
+    zIndex: 10,
+    paddingVertical: 4,
+  },
+  searchDropdownItem: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0f0f0",
+  },
+  searchDropdownText: {
+    fontSize: 15,
+    color: "#333",
+    fontWeight: "500",
+  },
+  searchDropdownSubText: {
+    fontSize: 12,
+    color: "#999",
+  },
   scrollView: {
     flex: 1,
     paddingHorizontal: 20,
@@ -263,71 +287,11 @@ const styles = StyleSheet.create({
   sectionContainer: {
     marginTop: 25,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 15,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#000",
     marginBottom: 15,
-  },
-  clearText: {
-    fontSize: 14,
-    color: "#9370DB",
-  },
-  recentBookingItem: {
-    backgroundColor: "#fff",
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowOffset: { width: 0, height: 1 },
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  recentBookingContent: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  recentBookingIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#F0F0F0",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  recentBookingInfo: {
-    flex: 1,
-  },
-  recentBookingSalon: {
-    fontWeight: "bold",
-    fontSize: 14,
-    color: "#333",
-  },
-  recentBookingService: {
-    fontSize: 12,
-    color: "#999",
-    marginTop: 3,
-  },
-  recentBookingDate: {
-    backgroundColor: "#F0F0F0",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 15,
-  },
-  recentBookingDateText: {
-    fontSize: 12,
-    color: "#666",
   },
   popularSearchesContainer: {
     flexDirection: "row",

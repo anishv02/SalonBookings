@@ -25,7 +25,7 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
       Alert.alert("Please fill all required fields");
       return;
     }
-    navigation.navigate("ServiceManagement");
+    navigation.navigate("SalonDashboard");
   };
 
   return (

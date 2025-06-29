@@ -47,6 +47,8 @@ const SalonDetailScreen = () => {
   const [availableSlots, setAvailableSlots] = useState({});
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [slotsError, setSlotsError] = useState(null);
+  const [morningExpanded, setMorningExpanded] = useState(true);
+  const [eveningExpanded, setEveningExpanded] = useState(false);
 
   // Tabs for salon details
   const tabs = ["Services", "Reviews", "Portfolio", "Gift Card"];
@@ -148,6 +150,9 @@ const SalonDetailScreen = () => {
     );
   };
 
+  console.log("salonID", salon._id);
+  console.log("totalDuration", totalDuration);
+
   // Fetch available slots when cart, selectedDate, or checkoutModalVisible changes
   useEffect(() => {
     const fetchSlots = async () => {
@@ -155,10 +160,14 @@ const SalonDetailScreen = () => {
       setLoadingSlots(true);
       setSlotsError(null);
       try {
-        const res = await axios.get(
-          `http://localhost:5000/api/bookings/available-slots?shopId=${salon._id}&duration=${totalDuration}`
+        const response = await fetch(
+          `http://192.168.1.4:3000/api/bookings/available-slots?shopId=${salon._id}&duration=${totalDuration}`
         );
-        setAvailableSlots(res.data.results || {});
+        if (!response.ok) {
+          throw new Error("Failed to fetch slots");
+        }
+        const res = await response.json();
+        setAvailableSlots(res.results || {});
       } catch (err) {
         setSlotsError("Failed to fetch slots");
         setAvailableSlots({});
@@ -253,6 +262,69 @@ const SalonDetailScreen = () => {
       </Text>
     </TouchableOpacity>
   );
+
+  // Add these helper functions after the existing helper functions (around line 95)
+  const getAvailableDates = () => {
+    const dates = [];
+    const today = new Date();
+    const currentHour = today.getHours();
+
+    // Add today only if current time is before 10 PM and slots are available
+    if (currentHour < 22) {
+      dates.push(today);
+    }
+
+    // Add next day
+    const nextDay = new Date(today);
+    nextDay.setDate(today.getDate() + 1);
+    dates.push(nextDay);
+
+    // Add day after next
+    const dayAfterNext = new Date(today);
+    dayAfterNext.setDate(today.getDate() + 2);
+    dates.push(dayAfterNext);
+
+    return dates;
+  };
+
+  const formatDateForDisplay = (date) => {
+    const today = new Date();
+    const diffTime = date.getTime() - today.getTime();
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const monthNames = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ];
+
+    if (diffDays === 0) {
+      return {
+        day: "Today",
+        date: `${date.getDate()} ${monthNames[date.getMonth()]}`,
+      };
+    } else if (diffDays === 1) {
+      return {
+        day: "Tomorrow",
+        date: `${date.getDate()} ${monthNames[date.getMonth()]}`,
+      };
+    } else {
+      return {
+        day: dayNames[date.getDay()],
+        date: `${date.getDate()} ${monthNames[date.getMonth()]}`,
+      };
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -471,9 +543,10 @@ const SalonDetailScreen = () => {
         onRequestClose={() => setCheckoutModalVisible(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+          <View style={[styles.modalContent, { maxHeight: "90%" }]}>
+            {/* Updated header with close icon on right */}
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Appointment Time</Text>
+              <Text style={styles.modalTitle}>Book table</Text>
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={() => setCheckoutModalVisible(false)}
@@ -482,79 +555,256 @@ const SalonDetailScreen = () => {
               </TouchableOpacity>
             </View>
 
-            <View style={styles.appointmentSummary}>
-              <Text style={styles.appointmentSummaryTitle}>
-                Booking Summary
-              </Text>
-              <Text style={styles.appointmentSummaryText}>
-                {cart.length} {cart.length === 1 ? "service" : "services"} at{" "}
-                {salon.shopName || "Salon"}
-              </Text>
-              <Text style={styles.appointmentSummaryPrice}>
-                Total: ₹{cartTotal.toFixed(2)}
-              </Text>
-            </View>
+            <Text style={styles.restaurantName}>
+              {salon.shopName || "Salon"}
+            </Text>
 
-            <View style={styles.datePickerContainer}>
-              <Text style={styles.datePickerTitle}>Select Date</Text>
-              <TouchableOpacity
-                style={styles.datePickerButton}
-                onPress={() => setShowDatePicker(true)}
-              >
-                <Text style={styles.datePickerButtonText}>
-                  {selectedDate.toDateString()}
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.appointmentSummary}>
+                <Text style={styles.appointmentSummaryTitle}>
+                  Booking Summary
                 </Text>
-                <Ionicons name="calendar" size={20} color="#9370DB" />
-              </TouchableOpacity>
+                <Text style={styles.appointmentSummaryText}>
+                  {cart.length} {cart.length === 1 ? "service" : "services"}{" "}
+                  selected
+                </Text>
+                <Text style={styles.appointmentSummaryPrice}>
+                  Total: ₹{cartTotal.toFixed(2)}
+                </Text>
+              </View>
 
-              {showDatePicker && (
-                <DateTimePicker
-                  value={selectedDate}
-                  mode="date"
-                  display="default"
-                  onChange={onDateChange}
-                  minimumDate={
-                    availableDates.length > 0 ? availableDates[0] : new Date()
-                  }
-                  maximumDate={
-                    availableDates.length > 0
-                      ? availableDates[availableDates.length - 1]
-                      : undefined
-                  }
-                  // The following disables unavailable dates (for iOS only)
-                  disabled={availableDates.length === 0}
-                />
-              )}
-            </View>
+              <View style={styles.dateSelectionContainer}>
+                <Text style={styles.sectionTitle}>When are you visiting?</Text>
+                <View style={styles.dateButtonsContainer}>
+                  {getAvailableDates().map((date, index) => {
+                    const dateInfo = formatDateForDisplay(date);
+                    const isSelected =
+                      selectedDate.toDateString() === date.toDateString();
 
-            <View style={styles.timeSlotContainer}>
-              <Text style={styles.timeSlotTitle}>Select Time</Text>
-              {loadingSlots ? (
-                <Text>Loading slots...</Text>
-              ) : slotsError ? (
-                <Text style={{ color: "red" }}>{slotsError}</Text>
-              ) : slotsForDate.length === 0 ? (
-                <Text>No slots available for this date.</Text>
-              ) : (
-                <FlatList
-                  data={slotsForDate}
-                  renderItem={renderTimeSlot}
-                  keyExtractor={(item, idx) => item.startTime + idx}
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                />
-              )}
-            </View>
+                    return (
+                      <TouchableOpacity
+                        key={index}
+                        style={[
+                          styles.dateButton,
+                          isSelected && styles.selectedDateButton,
+                        ]}
+                        onPress={() => {
+                          setSelectedDate(date);
+                          setSelectedTime(null); // Reset time when date changes
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.dateButtonDay,
+                            isSelected && styles.selectedDateButtonDay,
+                          ]}
+                        >
+                          {dateInfo.day}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.dateButtonDate,
+                            isSelected && styles.selectedDateButtonDate,
+                          ]}
+                        >
+                          {dateInfo.date}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
+
+              <Text style={styles.timeSelectionHint}>
+                Select the time of day to see the offers
+              </Text>
+
+              {/* Morning Slots Section */}
+              <View style={styles.timeSlotSection}>
+                <TouchableOpacity
+                  style={styles.mealTimeHeader}
+                  onPress={() => setMorningExpanded(!morningExpanded)}
+                >
+                  <View style={styles.mealTimeIcon}>
+                    <Ionicons name="sunny-outline" size={20} color="#FF6B35" />
+                  </View>
+                  <View style={styles.mealTimeInfo}>
+                    <Text style={styles.mealTimeTitle}>Morning Slots</Text>
+                    <Text style={styles.mealTimeHours}>
+                      08:00 AM to 12:00 PM
+                    </Text>
+                  </View>
+                  <View style={styles.expandIcon}>
+                    <Ionicons
+                      name={morningExpanded ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      color="#666"
+                    />
+                  </View>
+                </TouchableOpacity>
+
+                {morningExpanded && (
+                  <>
+                    {loadingSlots ? (
+                      <Text style={styles.loadingText}>Loading slots...</Text>
+                    ) : slotsError ? (
+                      <Text style={styles.errorText}>{slotsError}</Text>
+                    ) : slotsForDate.length === 0 ? (
+                      <Text style={styles.noSlotsText}>
+                        No slots available for this date.
+                      </Text>
+                    ) : (
+                      <View style={styles.timeButtonsGrid}>
+                        {slotsForDate
+                          .filter(
+                            (slot) =>
+                              new Date(slot.startTime).getHours() >= 8 &&
+                              new Date(slot.startTime).getHours() < 14
+                          )
+                          .map((slot, index) => {
+                            const startTime = new Date(slot.startTime);
+                            const timeString = startTime.toLocaleTimeString(
+                              [],
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            );
+                            const isSelected = selectedTime === slot.startTime;
+
+                            return (
+                              <TouchableOpacity
+                                key={index}
+                                style={[
+                                  styles.timeButton,
+                                  isSelected && styles.selectedTimeButton,
+                                ]}
+                                onPress={() => setSelectedTime(slot.startTime)}
+                              >
+                                <Text
+                                  style={[
+                                    styles.timeButtonText,
+                                    isSelected && styles.selectedTimeButtonText,
+                                  ]}
+                                >
+                                  {timeString}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                      </View>
+                    )}
+
+                    <TouchableOpacity style={styles.viewAllSlotsButton}>
+                      <Text style={styles.viewAllSlotsText}>
+                        View all slots
+                      </Text>
+                      <Ionicons name="chevron-down" size={16} color="#FF6B35" />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+
+              {/* Evening Slots Section */}
+              <View style={styles.eveningSlotSection}>
+                <TouchableOpacity
+                  style={styles.mealTimeHeader}
+                  onPress={() => setEveningExpanded(!eveningExpanded)}
+                >
+                  <View style={styles.mealTimeIcon}>
+                    <Ionicons
+                      name="restaurant-outline"
+                      size={20}
+                      color="#FF6B35"
+                    />
+                  </View>
+                  <View style={styles.mealTimeInfo}>
+                    <Text style={styles.mealTimeTitle}>Evening Slots</Text>
+                    <Text style={styles.mealTimeHours}>
+                      02:00 PM to 10:00 PM
+                    </Text>
+                  </View>
+                  <View style={styles.expandIcon}>
+                    <Ionicons
+                      name={eveningExpanded ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      color="#666"
+                    />
+                  </View>
+                </TouchableOpacity>
+
+                {eveningExpanded && (
+                  <>
+                    {loadingSlots ? (
+                      <Text style={styles.loadingText}>Loading slots...</Text>
+                    ) : slotsError ? (
+                      <Text style={styles.errorText}>{slotsError}</Text>
+                    ) : slotsForDate.length === 0 ? (
+                      <Text style={styles.noSlotsText}>
+                        No slots available for this date.
+                      </Text>
+                    ) : (
+                      <View style={styles.timeButtonsGrid}>
+                        {slotsForDate
+                          .filter(
+                            (slot) =>
+                              new Date(slot.startTime).getHours() >= 14 &&
+                              new Date(slot.startTime).getHours() < 22
+                          )
+                          .map((slot, index) => {
+                            const startTime = new Date(slot.startTime);
+                            const timeString = startTime.toLocaleTimeString(
+                              [],
+                              {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              }
+                            );
+                            const isSelected = selectedTime === slot.startTime;
+
+                            return (
+                              <TouchableOpacity
+                                key={index}
+                                style={[
+                                  styles.timeButton,
+                                  isSelected && styles.selectedTimeButton,
+                                ]}
+                                onPress={() => setSelectedTime(slot.startTime)}
+                              >
+                                <Text
+                                  style={[
+                                    styles.timeButtonText,
+                                    isSelected && styles.selectedTimeButtonText,
+                                  ]}
+                                >
+                                  {timeString}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+                      </View>
+                    )}
+
+                    <TouchableOpacity style={styles.viewAllSlotsButton}>
+                      <Text style={styles.viewAllSlotsText}>
+                        View all slots
+                      </Text>
+                      <Ionicons name="chevron-down" size={16} color="#FF6B35" />
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            </ScrollView>
 
             <TouchableOpacity
               style={[
-                styles.confirmButton,
-                !selectedTime && styles.disabledButton,
+                styles.proceedButton,
+                !selectedTime && styles.disabledProceedButton,
               ]}
               disabled={!selectedTime}
               onPress={togglePaymentModal}
             >
-              <Text style={styles.confirmButtonText}>Continue to Payment</Text>
+              <Text style={styles.proceedButtonText}>Proceed</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -591,7 +841,16 @@ const SalonDetailScreen = () => {
 
               <View style={styles.bookingDetail}>
                 <Text style={styles.bookingDetailLabel}>Time:</Text>
-                <Text style={styles.bookingDetailValue}>{selectedTime}</Text>
+                <Text style={styles.bookingDetailValue}>
+                  {selectedTime
+                    ? new Date(selectedTime).toLocaleTimeString("en-IN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                        timeZone: "Asia/Kolkata",
+                      })
+                    : ""}
+                </Text>
               </View>
 
               <View style={styles.bookingDetail}>
@@ -1294,6 +1553,183 @@ const styles = StyleSheet.create({
     color: "#999",
     textAlign: "center",
     marginTop: 16,
+  },
+  restaurantName: {
+    fontSize: 16,
+    color: "#666",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    marginBottom: 16,
+  },
+  dateSelectionContainer: {
+    marginBottom: 24,
+  },
+  dateButtonsContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  dateButton: {
+    backgroundColor: "#f8f8f8",
+    borderRadius: 12,
+    padding: 12,
+    alignItems: "center",
+    minWidth: 70,
+    position: "relative",
+    borderWidth: 2,
+    borderColor: "transparent",
+  },
+  selectedDateButton: {
+    backgroundColor: "#FFF4F0",
+    borderColor: "#FF6B35",
+  },
+  dateButtonDay: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "500",
+  },
+  selectedDateButtonDay: {
+    color: "#FF6B35",
+    fontWeight: "bold",
+  },
+  dateButtonDate: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 4,
+  },
+  selectedDateButtonDate: {
+    color: "#FF6B35",
+    fontWeight: "600",
+  },
+  discountBadge: {
+    position: "absolute",
+    bottom: -6,
+    backgroundColor: "#4CAF50",
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  discountText: {
+    fontSize: 10,
+    color: "white",
+    fontWeight: "bold",
+  },
+  timeSelectionHint: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 20,
+    textAlign: "center",
+  },
+  timeSlotSection: {
+    marginBottom: 20,
+  },
+  mealTimeHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#f8f8f8",
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  mealTimeIcon: {
+    marginRight: 12,
+  },
+  mealTimeInfo: {
+    flex: 1,
+  },
+  mealTimeTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  mealTimeHours: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2,
+  },
+  expandIcon: {
+    padding: 4,
+  },
+  timeButtonsGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "space-between",
+    marginBottom: 16,
+  },
+  timeButton: {
+    backgroundColor: "#f8f8f8",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+    minWidth: "30%",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#e0e0e0",
+  },
+  selectedTimeButton: {
+    backgroundColor: "#FFF4F0",
+    borderColor: "#FF6B35",
+  },
+  timeButtonText: {
+    fontSize: 14,
+    color: "#333",
+    fontWeight: "500",
+  },
+  selectedTimeButtonText: {
+    color: "#FF6B35",
+    fontWeight: "bold",
+  },
+  viewAllSlotsButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+  },
+  viewAllSlotsText: {
+    fontSize: 14,
+    color: "#FF6B35",
+    fontWeight: "600",
+    marginRight: 4,
+  },
+  eveningSlotSection: {
+    marginBottom: 20,
+  },
+  proceedButton: {
+    backgroundColor: "#9370DB",
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginTop: 10,
+  },
+  disabledProceedButton: {
+    backgroundColor: "#ccc",
+  },
+  proceedButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 16,
+  },
+  loadingText: {
+    textAlign: "center",
+    color: "#666",
+    fontSize: 14,
+    paddingVertical: 20,
+  },
+  errorText: {
+    textAlign: "center",
+    color: "#FF6B6B",
+    fontSize: 14,
+    paddingVertical: 20,
+  },
+  noSlotsText: {
+    textAlign: "center",
+    color: "#666",
+    fontSize: 14,
+    paddingVertical: 20,
   },
 });
 

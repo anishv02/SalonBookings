@@ -186,59 +186,53 @@ const HomeScreen = () => {
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
+
       const data = await response.json();
-      let salonsData;
-      if (Array.isArray(data)) {
-        salonsData = data;
-      } else if (data && typeof data === "object" && data._id) {
-        salonsData = [data];
-      } else {
-        salonsData = data.salons || data.shops || [];
-      }
-      // Filter salons by distance if userCoords is available and salon has lat/lng
-      if (userCoords) {
-        // Try to get user's city from reverse geocoding
-        let userCity = userCoords.city;
-        if (
-          !userCity &&
-          userCoords.latitude &&
-          userCoords.longitude &&
-          Location.reverseGeocodeAsync
-        ) {
-          try {
-            const geo = await Location.reverseGeocodeAsync({
-              latitude: userCoords.latitude,
-              longitude: userCoords.longitude,
-            });
-            if (geo && geo[0] && geo[0].city) {
-              userCity = geo[0].city;
-            }
-          } catch (e) {
-            userCity = undefined;
+      let salonsData = Array.isArray(data)
+        ? data
+        : data && typeof data === "object" && data._id
+        ? [data]
+        : data.salons || data.shops || [];
+
+      let userCity = "";
+
+      if (userCoords && userCoords.latitude && userCoords.longitude) {
+        try {
+          const geo = await Location.reverseGeocodeAsync({
+            latitude: userCoords.latitude,
+            longitude: userCoords.longitude,
+          });
+          if (geo && geo[0]) {
+            userCity = geo[0].city;
           }
+        } catch (e) {
+          console.log("Error getting city from geolocation", e);
         }
+
         salonsData = salonsData.filter((salon) => {
           // If salon has lat/lng, check distance
-          if (salon.latitude && salon.longitude) {
+          if (salon.latitude && salon.longitude && userCoords) {
             const dist = getDistanceFromLatLonInKm(
               userCoords.latitude,
               userCoords.longitude,
               salon.latitude,
               salon.longitude
             );
-            if (dist >= 10 && dist <= 15) return true;
+            // Show if within 7–10km
+            if (dist >= 7 && dist <= 10) return true;
           }
-          // If city matches (case-insensitive), also include
+          // If city matches (case-insensitive), show as well
           if (
-            salon.city &&
             userCity &&
-            salon.city.toLowerCase() === userCity.toLowerCase()
+            salon.city &&
+            salon.city.trim().toLowerCase() === userCity.trim().toLowerCase()
           ) {
             return true;
           }
           return false;
         });
       }
+
       setNearbySalons(salonsData);
     } catch (err) {
       console.error("Error fetching salon data:", err);
@@ -247,7 +241,7 @@ const HomeScreen = () => {
         "Error",
         "Failed to load salon data. Please check your connection and try again.",
         [
-          { text: "Retry", onPress: fetchSalonData },
+          { text: "Retry", onPress: () => fetchSalonData(userCoords) },
           { text: "Cancel", style: "cancel" },
         ]
       );
@@ -279,7 +273,32 @@ const HomeScreen = () => {
         return;
       }
       let location = await Location.getCurrentPositionAsync({});
-      console.log("User location:", location);
+      if (location && location.coords) {
+        // Try to get full address using reverse geocoding
+        try {
+          const addressArr = await Location.reverseGeocodeAsync({
+            latitude: location.coords.latitude,
+            longitude: location.coords.longitude,
+          });
+          if (addressArr && addressArr.length > 0) {
+            const address = addressArr[0];
+            console.log(
+              `Full Address: ${address.name || ""} ${address.street || ""}, ${
+                address.city || ""
+              }, ${address.region || ""}, ${address.postalCode || ""}, ${
+                address.country || ""
+              }`
+            );
+            console.log("nearBySalons", nearbySalons);
+          } else {
+            console.log("Address not found for location:", location);
+          }
+        } catch (err) {
+          console.log("Error getting address:", err);
+        }
+      } else {
+        console.log("User location:", location);
+      }
       fetchSalonData(location.coords);
     })();
   }, []);
@@ -407,19 +426,35 @@ const HomeScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-
-      {/* Header Section */}
+      /* Header Section */
       <View style={styles.header}>
         <View>
           <Text style={styles.greetingText}>Hello {userName}!</Text>
           <Text style={styles.welcomeText}>Good Morning!</Text>
-          {renderLocationStatus()}
+          {/* Show full address if available */}
+          {location && location.address ? (
+            <Text style={styles.locationStatusText}>
+              {[
+                location.address.name,
+                location.address.street,
+                location.address.neighborhood,
+                location.address.subregion,
+                location.address.city,
+                location.address.region,
+                location.address.postalCode,
+                location.address.country,
+              ]
+                .filter(Boolean)
+                .join(", ")}
+            </Text>
+          ) : (
+            renderLocationStatus()
+          )}
         </View>
         <TouchableOpacity style={styles.notificationButton}>
           <Ionicons name="notifications-outline" size={24} color="black" />
         </TouchableOpacity>
       </View>
-
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TouchableOpacity
@@ -440,7 +475,6 @@ const HomeScreen = () => {
           <Ionicons name="options-outline" size={20} color="#000" />
         </TouchableOpacity>
       </View>
-
       {/* Main Content ScrollView */}
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -509,7 +543,6 @@ const HomeScreen = () => {
           )}
         </View>
       </ScrollView>
-
       {/* Bottom Tab Bar */}
       <View style={styles.bottomTabBar}>
         <TouchableOpacity style={[styles.tabItem, styles.activeTab]}>
