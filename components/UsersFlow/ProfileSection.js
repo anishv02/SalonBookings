@@ -1,5 +1,5 @@
 // screens/ProfileScreen.js
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -13,34 +13,34 @@ import {
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons, FontAwesome5, MaterialIcons } from "@expo/vector-icons";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const ProfileScreen = () => {
+const RECENT_APPOINTMENTS = []; // or fetch from API if available
+
+const ProfileScreen = ({ route }) => {
   const navigation = useNavigation();
-  const [userName, setUserName] = useState("John Doe");
-  const [phoneNumber, setPhoneNumber] = useState("+1 (555) 123-4567");
+  const [user, setUser] = useState(route?.params?.user || null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
 
-  // Mock data for appointment history
-  const RECENT_APPOINTMENTS = [
-    {
-      id: "1",
-      salonName: "Cuts & Style",
-      service: "Haircut & Styling",
-      date: "15 Apr 2025",
-      time: "10:30 AM",
-      price: "$45.00",
-      status: "Completed",
-    },
-    {
-      id: "2",
-      salonName: "Beauty Lounge",
-      service: "Manicure & Pedicure",
-      date: "28 Mar 2025",
-      time: "2:00 PM",
-      price: "$65.00",
-      status: "Completed",
-    },
-  ];
+  useEffect(() => {
+    // Always fetch user from AsyncStorage (or context) if not passed via route
+    if (!user) {
+      import("@react-native-async-storage/async-storage").then(
+        ({ default: AsyncStorage }) => {
+          AsyncStorage.getItem("user")
+            .then((data) => {
+              if (data) setUser(JSON.parse(data));
+            })
+            .catch(() => {});
+        }
+      );
+    }
+  }, []);
+
+  const handleLogout = async () => {
+    await AsyncStorage.removeItem("user");
+    navigation.replace("PhoneVerification"); // Navigate to phone verification screen
+  };
 
   const toggleNotifications = () => {
     setNotificationsEnabled(!notificationsEnabled);
@@ -100,7 +100,9 @@ const ProfileScreen = () => {
         <View style={styles.profileCard}>
           <View style={styles.profileImageContainer}>
             <View style={styles.profileImage}>
-              <Text style={styles.profileInitials}>{userName.charAt(0)}</Text>
+              <Text style={styles.profileInitials}>
+                {user?.firstName?.charAt(0) || ""}
+              </Text>
             </View>
             <TouchableOpacity style={styles.cameraButton}>
               <Ionicons name="camera" size={16} color="#FFF" />
@@ -108,8 +110,11 @@ const ProfileScreen = () => {
           </View>
 
           <View style={styles.profileInfo}>
-            <Text style={styles.userName}>{userName}</Text>
-            <Text style={styles.userPhone}>{phoneNumber}</Text>
+            <Text style={styles.userName}>
+              {(user?.firstName || "") + " " + (user?.lastName || "")}
+            </Text>
+            <Text style={styles.userPhone}>{user?.contactNumber || ""}</Text>
+            <Text style={styles.userPhone}>{user?.email || ""}</Text>
           </View>
         </View>
 
@@ -257,16 +262,7 @@ const ProfileScreen = () => {
         </View>
 
         {/* Log Out Button */}
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={() => {
-            /* Add logout logic */
-            navigation.reset({
-              index: 0,
-              routes: [{ name: "Login" }],
-            });
-          }}
-        >
+        <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
 

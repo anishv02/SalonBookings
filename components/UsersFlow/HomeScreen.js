@@ -209,28 +209,32 @@ const HomeScreen = () => {
           console.log("Error getting city from geolocation", e);
         }
 
-        salonsData = salonsData.filter((salon) => {
-          // If salon has lat/lng, check distance
-          if (salon.latitude && salon.longitude && userCoords) {
-            const dist = getDistanceFromLatLonInKm(
-              userCoords.latitude,
-              userCoords.longitude,
-              salon.latitude,
-              salon.longitude
-            );
-            // Show if within 7–10km
-            if (dist >= 7 && dist <= 10) return true;
-          }
-          // If city matches (case-insensitive), show as well
-          if (
-            userCity &&
-            salon.city &&
-            salon.city.trim().toLowerCase() === userCity.trim().toLowerCase()
-          ) {
+        salonsData = salonsData
+          .map((salon) => {
+            if (salon.latitude && salon.longitude) {
+              const dist = getDistanceFromLatLonInKm(
+                userCoords.latitude,
+                userCoords.longitude,
+                salon.latitude,
+                salon.longitude
+              );
+              return { ...salon, distance: parseFloat(dist.toFixed(2)) };
+            }
+            return salon;
+          })
+          .filter((salon) => {
+            if (salon.distance && salon.distance >= 7 && salon.distance <= 10) {
+              return true;
+            }
+            if (
+              userCity &&
+              salon.city &&
+              salon.city.trim().toLowerCase() === userCity.trim().toLowerCase()
+            ) {
+              return true;
+            }
             return true;
-          }
-          return false;
-        });
+          });
       }
 
       setNearbySalons(salonsData);

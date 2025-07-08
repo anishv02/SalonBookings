@@ -37,11 +37,11 @@ const LoginScreen = ({ navigation }) => {
       );
       return;
     }
-    if (isSalonOwner) {
-      navigation.replace("SalonOwnerRegistration", { isSalonOwner: true });
-    } else {
-      navigation.replace("PersonalInfo", { isSalonOwner: false });
-    }
+    // if (isSalonOwner) {
+    //   navigation.replace("SalonOwnerRegistration", { isSalonOwner: true });
+    // } else {
+    //   navigation.replace("PersonalInfo", { isSalonOwner: false });
+    // }
   };
 
   return (

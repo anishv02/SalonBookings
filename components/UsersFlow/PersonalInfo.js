@@ -6,32 +6,54 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
+  Alert,
 } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 const PersonalInfoScreen = ({ navigation, route }) => {
-  const { isSalonOwner } = route.params;
-  const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
 
-  const handleContinue = () => {
-    // Save details (possibly in context or backend)
-    if (!isSalonOwner) {
-      navigation.navigate("Home");
-    } else {
-      // You can later route to SalonDashboardScreen or similar
-      alert("Salon owner flow coming soon");
+  const handleContinue = async () => {
+    if (!firstName || !lastName || !email || !contactNumber) {
+      Alert.alert("All fields are required");
+      return;
+    }
+    try {
+      const res = await fetch("http://192.168.1.4:3000/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstName, lastName, email, contactNumber }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        Alert.alert("Error", data.error || "Registration failed");
+        return;
+      }
+      const user = { firstName, lastName, email, contactNumber };
+      await AsyncStorage.setItem("user", JSON.stringify(user));
+      navigation.replace("Home");
+    } catch (e) {
+      Alert.alert("Error", "Could not register user");
     }
   };
 
   return (
     <View style={styles.container}>
       <Text style={styles.heading}>Tell us about you</Text>
-
       <TextInput
         style={styles.input}
-        placeholder="Full Name"
-        value={name}
-        onChangeText={setName}
+        placeholder="First Name"
+        value={firstName}
+        onChangeText={setFirstName}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Last Name"
+        value={lastName}
+        onChangeText={setLastName}
       />
       <TextInput
         style={styles.input}
@@ -40,9 +62,23 @@ const PersonalInfoScreen = ({ navigation, route }) => {
         value={email}
         onChangeText={setEmail}
       />
-
+      <TextInput
+        style={styles.input}
+        placeholder="Contact Number"
+        keyboardType="phone-pad"
+        value={contactNumber}
+        onChangeText={setContactNumber}
+      />
       <TouchableOpacity style={styles.button} onPress={handleContinue}>
         <Text style={styles.buttonText}>Continue</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={{ marginTop: 20, alignSelf: "center" }}
+        onPress={() => navigation.replace("PhoneVerification")}
+      >
+        <Text style={{ color: "#9370DB", fontWeight: "500" }}>
+          Already have an account?
+        </Text>
       </TouchableOpacity>
     </View>
   );

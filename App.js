@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import HomeScreen from "./components/UsersFlow/HomeScreen";
@@ -13,13 +14,30 @@ import DashboardScreen from "./components/SalonsFlow/DashboardScreen";
 import ServiceManagementScreen from "./components/SalonsFlow/ServiceManagementScreen";
 import WorkingHoursScreen from "./components/SalonsFlow/WorkingHoursScreen";
 import SlotManagementScreen from "./components/SalonsFlow/SlotManagementScreen";
+import PhoneVerification from "./components/UsersFlow/PhoneVerification";
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const [initialRoute, setInitialRoute] = useState(null);
+
+  useEffect(() => {
+    const checkUser = async () => {
+      const user = await AsyncStorage.getItem("user");
+      if (user) {
+        setInitialRoute("Home");
+      } else {
+        setInitialRoute("PersonalInfo");
+      }
+    };
+    checkUser();
+  }, []);
+
+  if (!initialRoute) return null; // or a loading spinner
+
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
-        {/* <Stack.Screen
+      <Stack.Navigator initialRouteName={initialRoute}>
+        <Stack.Screen
           name="Login"
           component={LoginScreen}
           options={{ headerShown: false }}
@@ -28,7 +46,7 @@ export default function App() {
           name="PersonalInfo"
           component={PersonalInfoScreen}
           options={{ headerShown: false }}
-        /> */}
+        />
         <Stack.Screen
           name="Home"
           component={HomeScreen}
@@ -77,6 +95,11 @@ export default function App() {
         <Stack.Screen
           name="SlotManagement"
           component={SlotManagementScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="PhoneVerification"
+          component={PhoneVerification}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
