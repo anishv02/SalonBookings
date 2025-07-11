@@ -182,17 +182,21 @@ const HomeScreen = () => {
     setError(null);
 
     try {
-      const response = await fetch("http://192.168.1.4:3000/getShopDetails");
+      // Use the provided API endpoint
+      const response = await fetch(
+        "http://13.233.157.248:5000/api/shops/getAllShops"
+      );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      let salonsData = Array.isArray(data)
+      // Assuming the API returns an array of shops in data.shops or data
+      let salonsData = Array.isArray(data.shops)
+        ? data.shops
+        : Array.isArray(data)
         ? data
-        : data && typeof data === "object" && data._id
-        ? [data]
-        : data.salons || data.shops || [];
+        : [];
 
       let userCity = "";
 
@@ -430,7 +434,6 @@ const HomeScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
-      /* Header Section */
       <View style={styles.header}>
         <View>
           <Text style={styles.greetingText}>Hello {userName}!</Text>
@@ -566,14 +569,12 @@ const HomeScreen = () => {
           <Ionicons name="chatbubble-outline" size={22} color="#999" />
           <Text style={styles.tabText}>Message</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabItem}>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => navigation.navigate("Profile")}
+        >
           <Ionicons name="person-outline" size={22} color="#999" />
-          <Text
-            style={styles.tabText}
-            onPress={() => navigation.navigate("Profile")}
-          >
-            Profile
-          </Text>
+          <Text style={styles.tabText}>Profile</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

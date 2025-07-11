@@ -122,32 +122,69 @@ const SalonDetailScreen = () => {
   };
 
   // Handle booking confirmation
-  const confirmBooking = () => {
-    // You would normally send this to your backend
-    console.log("Booking confirmed:", {
-      services: cart,
-      date: selectedDate,
-      time: selectedTime,
-      salon: salonName,
-      paymentMethod: paymentMethod,
-      bookingAmount: bookingAmount,
-      totalAmount: cartTotal,
-    });
+  const confirmBooking = async () => {
+    try {
+      // Get user from AsyncStorage
+      const userData = await import(
+        "@react-native-async-storage/async-storage"
+      ).then(({ default: AsyncStorage }) => AsyncStorage.getItem("user"));
+      const userObj = userData ? JSON.parse(userData) : null;
 
-    // Close modal and show confirmation
-    setPaymentModalVisible(false);
-    // Reset cart after booking
-    setCart([]);
-    // You could navigate to a confirmation screen or show a success message
-    alert(
-      `Booking confirmed for ${selectedDate.toDateString()} at ${selectedTime}. ${
-        paymentMethod === "online"
-          ? "Booking amount of ₹" +
-            bookingAmount.toFixed(2) +
-            " paid successfully!"
-          : "You'll pay full amount at the salon."
-      }`
-    );
+      if (!userObj || !userObj._id) {
+        alert("User not found. Please login again.");
+        return;
+      }
+
+      if (!selectedTime) {
+        alert("Please select a time slot.");
+        return;
+      }
+
+      // Find the selected slot object for endTime
+      const slotObj = slotsForDate.find(
+        (slot) => slot.startTime === selectedTime
+      );
+
+      if (!slotObj) {
+        alert("Selected slot not found.");
+        return;
+      }
+
+      const bookingData = {
+        user: userObj._id,
+        shop: salon._id,
+        services: cart.map((s) => ({
+          name: s.name,
+          price: s.price,
+          duration: s.duration,
+        })),
+        startTime: slotObj.startTime,
+        endTime: slotObj.endTime,
+      };
+
+      const res = await fetch(
+        "http://13.233.157.248:5000/api/bookings/book-slot",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(bookingData),
+        }
+      );
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        alert(data.error || "Booking failed");
+        return;
+      }
+
+      setPaymentModalVisible(false);
+      setCart([]);
+      alert("Booking confirmed!");
+      // Optionally, navigate to a confirmation screen or show more details
+    } catch (err) {
+      alert("Error booking slot. Please try again.");
+    }
   };
 
   // Fetch available slots when cart, selectedDate, or checkoutModalVisible changes
@@ -157,21 +194,15 @@ const SalonDetailScreen = () => {
       setLoadingSlots(true);
       setSlotsError(null);
       try {
-        const response = await fetch(
-          "http://192.168.1.4:3000/api/bookings/available-slots/generate",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              shopId: salon._id,
-              startDate: selectedDate.toISOString().slice(0, 10),
-            }),
-          }
-        );
+        // Use the new GET API for slots
+        const url = `http://13.233.157.248:5000/api/bookings/available-slots?shopId=${salon._id}&duration=${totalDuration}`;
+        const response = await fetch(url);
         if (!response.ok) {
           throw new Error("Failed to fetch slots");
         }
         const res = await response.json();
+        console.log("Available slots API response:", res);
+        // Assuming the API returns { results: { "YYYY-MM-DD": [slots] } }
         setAvailableSlots(res.results || {});
       } catch (err) {
         setSlotsError("Failed to fetch slots");
@@ -663,7 +694,6 @@ const SalonDetailScreen = () => {
                     />
                   </View>
                 </TouchableOpacity>
-
                 {morningExpanded && (
                   <>
                     {loadingSlots ? (

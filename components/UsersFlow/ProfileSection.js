@@ -110,11 +110,9 @@ const ProfileScreen = ({ route }) => {
           </View>
 
           <View style={styles.profileInfo}>
-            <Text style={styles.userName}>
-              {(user?.firstName || "") + " " + (user?.lastName || "")}
-            </Text>
-            <Text style={styles.userPhone}>{user?.contactNumber || ""}</Text>
-            <Text style={styles.userPhone}>{user?.email || ""}</Text>
+            <Text style={styles.userName}>{user?.name}</Text>
+            <Text style={styles.userPhone}>{user?.email}</Text>
+            <Text style={styles.userPhone}>{user?.contactNumber}</Text>
           </View>
         </View>
 

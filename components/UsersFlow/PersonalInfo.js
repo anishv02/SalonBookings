@@ -10,30 +10,31 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const PersonalInfoScreen = ({ navigation, route }) => {
-  const [firstName, setFirstName] = useState("");
-  const [lastName, setLastName] = useState("");
+const PersonalInfoScreen = ({ navigation }) => {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+  const [password, setPassword] = useState("");
 
   const handleContinue = async () => {
-    if (!firstName || !lastName || !email || !contactNumber) {
+    if (!name || !email || !contactNumber || !password) {
       Alert.alert("All fields are required");
       return;
     }
     try {
-      const res = await fetch("http://192.168.1.4:3000/api/users", {
+      const res = await fetch("http://13.233.157.248:5000/api/users/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ firstName, lastName, email, contactNumber }),
+        body: JSON.stringify({ name, email, contactNumber, password }),
       });
+      const data = await res.json();
+
       if (!res.ok) {
-        const data = await res.json();
         Alert.alert("Error", data.error || "Registration failed");
         return;
       }
-      const user = { firstName, lastName, email, contactNumber };
-      await AsyncStorage.setItem("user", JSON.stringify(user));
+      // Save the returned user object
+      await AsyncStorage.setItem("user", JSON.stringify(data));
       navigation.replace("Home");
     } catch (e) {
       Alert.alert("Error", "Could not register user");
@@ -45,15 +46,9 @@ const PersonalInfoScreen = ({ navigation, route }) => {
       <Text style={styles.heading}>Tell us about you</Text>
       <TextInput
         style={styles.input}
-        placeholder="First Name"
-        value={firstName}
-        onChangeText={setFirstName}
-      />
-      <TextInput
-        style={styles.input}
-        placeholder="Last Name"
-        value={lastName}
-        onChangeText={setLastName}
+        placeholder="Name"
+        value={name}
+        onChangeText={setName}
       />
       <TextInput
         style={styles.input}
@@ -68,6 +63,13 @@ const PersonalInfoScreen = ({ navigation, route }) => {
         keyboardType="phone-pad"
         value={contactNumber}
         onChangeText={setContactNumber}
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        secureTextEntry
+        value={password}
+        onChangeText={setPassword}
       />
       <TouchableOpacity style={styles.button} onPress={handleContinue}>
         <Text style={styles.buttonText}>Continue</Text>
