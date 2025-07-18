@@ -15,6 +15,11 @@ import ServiceManagementScreen from "./components/SalonsFlow/ServiceManagementSc
 import WorkingHoursScreen from "./components/SalonsFlow/WorkingHoursScreen";
 import SlotManagementScreen from "./components/SalonsFlow/SlotManagementScreen";
 import PhoneVerification from "./components/UsersFlow/PhoneVerification";
+import SalonProfileScreen from "./components/SalonsFlow/SalonProfileScreen";
+import CustomersView from "./components/SalonsFlow/CustomerViewComponent";
+import CustomerDetailView from "./components/SalonsFlow/CustomerDetailView";
+import SeatsView from "./components/SalonsFlow/SeatsViewmanagement";
+
 const Stack = createNativeStackNavigator();
 
 export default function App() {
@@ -24,9 +29,9 @@ export default function App() {
     const checkUser = async () => {
       const user = await AsyncStorage.getItem("user");
       if (user) {
-        setInitialRoute("Home");
+        setInitialRoute("SalonDashboard");
       } else {
-        setInitialRoute("PersonalInfo");
+        setInitialRoute("SalonDashboard");
       }
     };
     checkUser();
@@ -100,6 +105,31 @@ export default function App() {
         <Stack.Screen
           name="PhoneVerification"
           component={PhoneVerification}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="SalonProfile"
+          component={SalonProfileScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="CustomersView"
+          component={CustomersView}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="customerDetails"
+          component={CustomerDetailView}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="seats"
+          component={SeatsView}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="profile"
+          component={SalonProfileScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
