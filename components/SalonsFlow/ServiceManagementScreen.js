@@ -3,225 +3,395 @@ import {
   View,
   Text,
   TextInput,
-  Button,
-  StyleSheet,
-  ScrollView,
   TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ScrollView,
+  FlatList,
 } from "react-native";
 
-const predefinedServices = [
-  { name: "Haircut" },
-  { name: "Beard" },
-  { name: "Face Massage" },
-  { name: "Hair Spa" },
-  { name: "Facial" },
-  { name: "Hair Color" },
-  { name: "Threading" },
-];
-
-const ServiceManagementScreen = ({ navigation }) => {
-  const [availableServices, setAvailableServices] =
-    useState(predefinedServices);
+const AddSalonServicesScreen = ({ navigation }) => {
+  const [serviceName, setServiceName] = useState("");
+  const [servicePrice, setServicePrice] = useState("");
   const [services, setServices] = useState([]);
-  const [predefinedServices, setPredefinedServices] = useState([
-    { name: "Haircut", price: 200 },
-    { name: "Shave", price: 100 },
-    // ...other predefined
-  ]);
-  const [customService, setCustomService] = useState({
-    name: "",
-    duration: "",
-    price: "",
-  });
-  const [predefinedAdded, setPredefinedAdded] = useState(false);
+  const [editingIndex, setEditingIndex] = useState(-1);
 
-  const handleSelectPredefined = (service) => {
-    setServices([
-      ...services,
-      { name: service.name, duration: "", price: "", isCustom: false },
-    ]);
-    setAvailableServices(
-      availableServices.filter((s) => s.name !== service.name)
+  const addService = () => {
+    if (!serviceName.trim() || !servicePrice.trim()) {
+      Alert.alert("Invalid Input", "Please enter both service name and price");
+      return;
+    }
+
+    if (isNaN(servicePrice) || parseFloat(servicePrice) <= 0) {
+      Alert.alert("Invalid Price", "Please enter a valid price");
+      return;
+    }
+
+    const newService = {
+      id: Date.now().toString(),
+      name: serviceName.trim(),
+      price: parseFloat(servicePrice),
+    };
+
+    if (editingIndex >= 0) {
+      // Update existing service
+      const updatedServices = [...services];
+      updatedServices[editingIndex] = newService;
+      setServices(updatedServices);
+      setEditingIndex(-1);
+    } else {
+      // Add new service
+      setServices([...services, newService]);
+    }
+
+    setServiceName("");
+    setServicePrice("");
+  };
+
+  const editService = (index) => {
+    const service = services[index];
+    setServiceName(service.name);
+    setServicePrice(service.price.toString());
+    setEditingIndex(index);
+  };
+
+  const deleteService = (index) => {
+    Alert.alert(
+      "Delete Service",
+      "Are you sure you want to delete this service?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            const updatedServices = services.filter((_, i) => i !== index);
+            setServices(updatedServices);
+            if (editingIndex === index) {
+              setServiceName("");
+              setServicePrice("");
+              setEditingIndex(-1);
+            }
+          },
+        },
+      ]
     );
   };
 
-  const handleServiceChange = (index, field, value) => {
-    const updated = [...services];
-    updated[index][field] = value;
-    setServices(updated);
-  };
-
-  const handleAddCustomService = () => {
-    if (!customService.name || !customService.price) return;
-
-    let newServices = [...services, customService];
-    if (!predefinedAdded) {
-      newServices = [...predefinedServices, ...newServices];
-      setPredefinedAdded(true);
+  const handleContinue = () => {
+    if (services.length === 0) {
+      Alert.alert(
+        "No Services Added",
+        "You haven't added any services yet. Are you sure you want to continue?",
+        [
+          { text: "Add Services", style: "cancel" },
+          {
+            text: "Continue Anyway",
+            onPress: () => {
+              Alert.alert("Success", "Proceeding without services");
+              navigation.navigate("SalonDashboard"); // Replace with actual next screen
+            },
+          },
+        ]
+      );
+      return;
     }
 
-    setServices(newServices);
-    setCustomService({ name: "", price: "" });
+    Alert.alert(
+      "Services Added",
+      `Successfully added ${services.length} service(s)!`
+    );
+    // navigation.navigate('NextScreen');
   };
 
-  const handleRemoveService = (index) => {
-    const removed = services[index];
-    if (!removed.isCustom) {
-      setAvailableServices([...availableServices, { name: removed.name }]);
-    }
-    const updated = [...services];
-    updated.splice(index, 1);
-    setServices(updated);
+  const handleSkip = () => {
+    navigation.navigate("SalonDashboard"); // Replace with actual next screen
   };
 
-  const handleSave = () => {
-    console.log("Final services to send:", services);
-    // TODO: Send to backend
-    navigation.navigate("WorkingHoursScreen");
-  };
+  const renderServiceItem = ({ item, index }) => (
+    <View style={styles.serviceItem}>
+      <View style={styles.serviceInfo}>
+        <Text style={styles.serviceName}>{item.name}</Text>
+        <Text style={styles.servicePrice}>₹{item.price}</Text>
+      </View>
+      <View style={styles.serviceActions}>
+        <TouchableOpacity
+          style={styles.editButton}
+          onPress={() => editService(index)}
+        >
+          <Text style={styles.editButtonText}>Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.deleteButton}
+          onPress={() => deleteService(index)}
+        >
+          <Text style={styles.deleteButtonText}>Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   return (
-    <ScrollView style={styles.container}>
-      <Text style={styles.header}>Add Services</Text>
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <View style={styles.content}>
+        <Text style={styles.heading}>Add Salon Services</Text>
+        <Text style={styles.subheading}>
+          Add your services and pricing to help customers know what you offer
+        </Text>
 
-      <View style={styles.tilesContainer}>
-        {availableServices.map((service, idx) => (
-          <TouchableOpacity
-            key={idx}
-            style={styles.tile}
-            onPress={() => handleSelectPredefined(service)}
-          >
-            <Text style={styles.tileText}>{service.name}</Text>
+        {/* Add Service Form */}
+        <View style={styles.formContainer}>
+          <Text style={styles.formTitle}>
+            {editingIndex >= 0 ? "Edit Service" : "Add New Service"}
+          </Text>
+
+          <TextInput
+            style={styles.input}
+            placeholder="Service Name (e.g., Haircut, Facial)"
+            value={serviceName}
+            onChangeText={setServiceName}
+          />
+
+          <View style={styles.priceInputContainer}>
+            <Text style={styles.currencySymbol}>₹</Text>
+            <TextInput
+              style={styles.priceInput}
+              placeholder="Price"
+              keyboardType="numeric"
+              value={servicePrice}
+              onChangeText={setServicePrice}
+            />
+          </View>
+
+          <TouchableOpacity style={styles.addButton} onPress={addService}>
+            <Text style={styles.addButtonText}>
+              {editingIndex >= 0 ? "Update Service" : "Add Service"}
+            </Text>
           </TouchableOpacity>
-        ))}
-      </View>
 
-      {services.map((service, index) => (
-        <View key={index} style={styles.serviceBox}>
-          <Text style={styles.serviceLabel}>{service.name}</Text>
-          <TextInput
-            placeholder="Duration (in mins)"
-            keyboardType="numeric"
-            value={service.duration}
-            onChangeText={(val) => handleServiceChange(index, "duration", val)}
-            style={styles.input}
-          />
-          <TextInput
-            placeholder="Price (₹)"
-            keyboardType="numeric"
-            value={service.price}
-            onChangeText={(val) => handleServiceChange(index, "price", val)}
-            style={styles.input}
-          />
-          <TouchableOpacity onPress={() => handleRemoveService(index)}>
-            <Text style={styles.removeBtn}>Remove</Text>
+          {editingIndex >= 0 && (
+            <TouchableOpacity
+              style={styles.cancelEditButton}
+              onPress={() => {
+                setServiceName("");
+                setServicePrice("");
+                setEditingIndex(-1);
+              }}
+            >
+              <Text style={styles.cancelEditText}>Cancel Edit</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+
+        {/* Services List */}
+        {services.length > 0 && (
+          <View style={styles.servicesContainer}>
+            <Text style={styles.servicesTitle}>
+              Added Services ({services.length})
+            </Text>
+            <FlatList
+              data={services}
+              renderItem={renderServiceItem}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+            />
+          </View>
+        )}
+
+        {/* Action Buttons */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={handleContinue}
+          >
+            <Text style={styles.continueButtonText}>
+              Continue {services.length > 0 && `(${services.length} services)`}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.skipButton} onPress={handleSkip}>
+            <Text style={styles.skipButtonText}>Skip & Continue</Text>
           </TouchableOpacity>
         </View>
-      ))}
-
-      <Text style={styles.subheader}>Add Custom Service</Text>
-      <TextInput
-        placeholder="Service Name"
-        value={customService.name}
-        onChangeText={(val) =>
-          setCustomService({ ...customService, name: val })
-        }
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Duration (mins)"
-        value={customService.duration}
-        onChangeText={(val) =>
-          setCustomService({ ...customService, duration: val })
-        }
-        keyboardType="numeric"
-        style={styles.input}
-      />
-      <TextInput
-        placeholder="Price (₹)"
-        value={customService.price}
-        onChangeText={(val) =>
-          setCustomService({ ...customService, price: val })
-        }
-        keyboardType="numeric"
-        style={styles.input}
-      />
-      <Button
-        title="Add Custom Service"
-        onPress={handleAddCustomService}
-        color="#9370DB"
-      />
-
-      <Button
-        title="Save & Continue"
-        onPress={handleSave}
-        color="#9370DB"
-        style={{ marginTop: 20 }}
-      />
+      </View>
     </ScrollView>
   );
 };
 
-export default ServiceManagementScreen;
+export default AddSalonServicesScreen;
 
 const styles = StyleSheet.create({
-  container: { padding: 16 },
-  header: {
-    fontSize: 22,
-    fontWeight: "bold",
-    marginBottom: 10,
-    color: "#9370DB",
+  container: {
+    flex: 1,
+    backgroundColor: "#fff",
   },
-  subheader: {
-    fontSize: 18,
-    fontWeight: "600",
-    marginTop: 20,
-    color: "#9370DB",
+  content: {
+    padding: 24,
+    paddingTop: 60,
+    paddingBottom: 40,
   },
-
-  tilesContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    justifyContent: "flex-start",
+  heading: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#333",
+    textAlign: "center",
+    marginBottom: 6,
   },
-  tile: {
-    backgroundColor: "#E6E6FA",
-    paddingVertical: 10,
-    paddingHorizontal: 15,
-    borderRadius: 20,
-    margin: 5,
-    borderColor: "#9370DB",
-    borderWidth: 1,
+  subheading: {
+    fontSize: 14,
+    color: "#666",
+    textAlign: "center",
+    marginBottom: 24,
+    lineHeight: 20,
   },
-  tileText: {
-    color: "#9370DB",
-    fontWeight: "600",
+  formContainer: {
+    backgroundColor: "#f8f9fa",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 20,
   },
-
-  serviceBox: {
-    backgroundColor: "#f8f8f8",
-    borderRadius: 10,
-    padding: 10,
-    marginVertical: 10,
-    borderColor: "#ccc",
-    borderWidth: 1,
-  },
-  serviceLabel: {
+  formTitle: {
     fontSize: 16,
-    fontWeight: "bold",
-    color: "#9370DB",
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: "#ccc",
-    borderRadius: 6,
-    padding: 8,
-    marginTop: 8,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 12,
+    fontSize: 15,
+    backgroundColor: "#fff",
   },
-  removeBtn: {
-    color: "red",
-    marginTop: 6,
+  priceInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 10,
+    backgroundColor: "#fff",
+    marginBottom: 16,
+  },
+  currencySymbol: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#333",
+    paddingLeft: 12,
+    paddingRight: 6,
+  },
+  priceInput: {
+    flex: 1,
+    padding: 12,
+    paddingLeft: 0,
+    fontSize: 15,
+  },
+  addButton: {
+    backgroundColor: "#9370DB",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  addButtonText: {
+    textAlign: "center",
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  cancelEditButton: {
+    padding: 8,
+  },
+  cancelEditText: {
+    textAlign: "center",
+    color: "#666",
+    fontSize: 13,
+  },
+  servicesContainer: {
+    marginBottom: 24,
+  },
+  servicesTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 12,
+  },
+  serviceItem: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    backgroundColor: "#f8f9fa",
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: "#9370DB",
+  },
+  serviceInfo: {
+    flex: 1,
+  },
+  serviceName: {
+    fontSize: 15,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 3,
+  },
+  servicePrice: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#9370DB",
+  },
+  serviceActions: {
+    flexDirection: "row",
+    gap: 6,
+  },
+  editButton: {
+    backgroundColor: "#4CAF50",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
+  },
+  editButtonText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  deleteButton: {
+    backgroundColor: "#FF5722",
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 5,
+  },
+  deleteButtonText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  actionButtons: {
+    gap: 10,
+  },
+  continueButton: {
+    backgroundColor: "#9370DB",
+    padding: 14,
+    borderRadius: 10,
+  },
+  continueButtonText: {
+    textAlign: "center",
+    color: "#fff",
+    fontWeight: "600",
+    fontSize: 15,
+  },
+  skipButton: {
+    backgroundColor: "transparent",
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+  },
+  skipButtonText: {
+    textAlign: "center",
+    color: "#666",
     fontWeight: "500",
+    fontSize: 15,
   },
 });

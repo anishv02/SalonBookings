@@ -21,11 +21,7 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
   const [salonType, setSalonType] = useState("men");
 
   const handleNext = () => {
-    if (!shopName || !shopOwnerName || !contactNumber || !email) {
-      Alert.alert("Please fill all required fields");
-      return;
-    }
-    navigation.navigate("SalonDashboard");
+    navigation.navigate("ServiceManagement");
   };
 
   return (
@@ -104,7 +100,7 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
       </View>
 
       <TouchableOpacity style={styles.button} onPress={handleNext}>
-        <Text style={styles.buttonText}>Next: Add Services</Text>
+        <Text style={styles.buttonText}>Continue</Text>
       </TouchableOpacity>
     </ScrollView>
   );

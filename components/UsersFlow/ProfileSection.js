@@ -9,76 +9,561 @@ import {
   SafeAreaView,
   ScrollView,
   StatusBar,
-  Switch,
+  TextInput,
+  Modal,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons, FontAwesome5, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const RECENT_APPOINTMENTS = []; // or fetch from API if available
-
 const ProfileScreen = ({ route }) => {
   const navigation = useNavigation();
   const [user, setUser] = useState(route?.params?.user || null);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [isEditModalVisible, setEditModalVisible] = useState(false);
+  const [isPersonalInfoVisible, setPersonalInfoVisible] = useState(false);
+  const [editedUser, setEditedUser] = useState({});
+  const [isLoading, setIsLoading] = useState(false);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   useEffect(() => {
     // Always fetch user from AsyncStorage (or context) if not passed via route
     if (!user) {
-      import("@react-native-async-storage/async-storage").then(
-        ({ default: AsyncStorage }) => {
-          AsyncStorage.getItem("user")
-            .then((data) => {
-              if (data) setUser(JSON.parse(data));
-            })
-            .catch(() => {});
-        }
-      );
+      loadUserData();
     }
   }, []);
 
-  const handleLogout = async () => {
-    await AsyncStorage.removeItem("user");
-    navigation.replace("PhoneVerification"); // Navigate to phone verification screen
-  };
-
-  const toggleNotifications = () => {
-    setNotificationsEnabled(!notificationsEnabled);
-  };
-
-  const renderAppointmentItem = (item) => (
-    <TouchableOpacity
-      key={item.id}
-      style={styles.appointmentCard}
-      onPress={() =>
-        navigation.navigate("AppointmentDetail", { appointmentId: item.id })
+  const loadUserData = async () => {
+    try {
+      const userData = await AsyncStorage.getItem("user");
+      if (userData) {
+        const parsedUser = JSON.parse(userData);
+        setUser(parsedUser);
+        setEditedUser(parsedUser);
       }
-    >
-      <View style={styles.appointmentHeader}>
-        <Text style={styles.salonName}>{item.salonName}</Text>
-        <View
-          style={[
-            styles.statusBadge,
-            item.status === "Completed"
-              ? styles.completedStatus
-              : styles.upcomingStatus,
-          ]}
-        >
-          <Text style={styles.statusText}>{item.status}</Text>
-        </View>
-      </View>
+    } catch (error) {
+      console.error("Error loading user data:", error);
+    }
+  };
 
-      <View style={styles.appointmentDetails}>
-        <View style={styles.serviceInfo}>
-          <Text style={styles.serviceText}>{item.service}</Text>
-          <Text style={styles.appointmentTime}>
-            {item.date} • {item.time}
-          </Text>
-        </View>
-        <Text style={styles.priceText}>{item.price}</Text>
-      </View>
-    </TouchableOpacity>
+  const handleEditProfile = () => {
+    const userData = {
+      name: user?.name || "",
+      firstName: user?.firstName || "",
+      lastName: user?.lastName || "",
+      email: user?.email || "",
+      contactNumber: user?.contactNumber || "",
+      dateOfBirth: user?.dateOfBirth || "",
+      address: user?.address || "",
+      city: user?.city || "",
+      state: user?.state || "",
+      pincode: user?.pincode || "",
+    };
+    setEditedUser(userData);
+    setIsEditMode(true);
+  };
+
+  const handleCancelEdit = () => {
+    setIsEditMode(false);
+    setEditedUser({});
+  };
+
+  const handleSaveProfile = async () => {
+    setIsLoading(true);
+    try {
+      // Validate required fields
+      if (!editedUser.name || !editedUser.email || !editedUser.contactNumber) {
+        Alert.alert(
+          "Error",
+          "Please fill in all required fields (Name, Email, Contact Number)"
+        );
+        setIsLoading(false);
+        return;
+      }
+
+      // Email validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(editedUser.email)) {
+        Alert.alert("Error", "Please enter a valid email address");
+        setIsLoading(false);
+        return;
+      }
+
+      // Phone validation (basic)
+      const phoneRegex = /^[+]?[\d\s\-()]{10,}$/;
+      if (!phoneRegex.test(editedUser.contactNumber)) {
+        Alert.alert("Error", "Please enter a valid contact number");
+        setIsLoading(false);
+        return;
+      }
+
+      // Create updated user object
+      const updatedUser = {
+        ...editedUser,
+        firstName: editedUser.firstName || editedUser.name.split(" ")[0],
+        lastName:
+          editedUser.lastName || editedUser.name.split(" ").slice(1).join(" "),
+      };
+
+      // Save to AsyncStorage
+      await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+
+      // Update local state
+      setUser(updatedUser);
+      setIsEditMode(false);
+
+      Alert.alert("Success", "Profile updated successfully!");
+    } catch (error) {
+      console.error("Error saving profile:", error);
+      Alert.alert("Error", "Failed to update profile. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    Alert.alert("Logout", "Are you sure you want to logout?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Logout",
+        style: "destructive",
+        onPress: async () => {
+          await AsyncStorage.removeItem("user");
+          navigation.replace("PhoneVerification");
+        },
+      },
+    ]);
+  };
+
+  const getInitials = () => {
+    if (user?.firstName && user?.lastName) {
+      return (user.firstName.charAt(0) + user.lastName.charAt(0)).toUpperCase();
+    } else if (user?.name) {
+      const nameParts = user.name.split(" ");
+      if (nameParts.length >= 2) {
+        return (nameParts[0].charAt(0) + nameParts[1].charAt(0)).toUpperCase();
+      }
+      return user.name.charAt(0).toUpperCase();
+    }
+    return "U";
+  };
+
+  const renderPersonalInfoScreen = () => (
+    <Modal
+      visible={isPersonalInfoVisible}
+      animationType="slide"
+      presentationStyle="fullScreen"
+    >
+      <SafeAreaView style={styles.modalContainer}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={styles.modalContainer}
+        >
+          {/* Header */}
+          <View style={styles.modalHeader}>
+            <TouchableOpacity
+              onPress={() => {
+                if (isEditMode) {
+                  handleCancelEdit();
+                } else {
+                  setPersonalInfoVisible(false);
+                }
+              }}
+              style={styles.modalCancelButton}
+            >
+              <Ionicons name="arrow-back" size={24} color="#9370DB" />
+            </TouchableOpacity>
+            <Text style={styles.modalTitle}>Personal Information</Text>
+            <TouchableOpacity
+              onPress={() => {
+                if (isEditMode) {
+                  handleSaveProfile();
+                } else {
+                  handleEditProfile();
+                }
+              }}
+              style={styles.modalSaveButton}
+              disabled={isLoading}
+            >
+              <Text style={styles.modalSaveText}>
+                {isLoading ? "Saving..." : isEditMode ? "Save" : "Edit"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <ScrollView
+            style={styles.modalContent}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Profile Image */}
+            <View style={styles.modalProfileImageContainer}>
+              <View style={styles.modalProfileImage}>
+                <Text style={styles.modalProfileInitials}>{getInitials()}</Text>
+              </View>
+              {isEditMode && (
+                <TouchableOpacity style={styles.modalCameraButton}>
+                  <Ionicons name="camera" size={16} color="#FFF" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Content */}
+            <View style={styles.formContainer}>
+              {isEditMode ? (
+                // Edit Mode - Form Fields
+                <>
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Full Name *</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      value={editedUser.name}
+                      onChangeText={(text) =>
+                        setEditedUser({ ...editedUser, name: text })
+                      }
+                      placeholder="Enter your full name"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Email Address *</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      value={editedUser.email}
+                      onChangeText={(text) =>
+                        setEditedUser({ ...editedUser, email: text })
+                      }
+                      placeholder="Enter your email"
+                      placeholderTextColor="#999"
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Contact Number *</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      value={editedUser.contactNumber}
+                      onChangeText={(text) =>
+                        setEditedUser({ ...editedUser, contactNumber: text })
+                      }
+                      placeholder="Enter your phone number"
+                      placeholderTextColor="#999"
+                      keyboardType="phone-pad"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Date of Birth</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      value={editedUser.dateOfBirth}
+                      onChangeText={(text) =>
+                        setEditedUser({ ...editedUser, dateOfBirth: text })
+                      }
+                      placeholder="DD/MM/YYYY"
+                      placeholderTextColor="#999"
+                    />
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>Address</Text>
+                    <TextInput
+                      style={[styles.textInput, styles.textArea]}
+                      value={editedUser.address}
+                      onChangeText={(text) =>
+                        setEditedUser({ ...editedUser, address: text })
+                      }
+                      placeholder="Enter your address"
+                      placeholderTextColor="#999"
+                      multiline
+                      numberOfLines={3}
+                    />
+                  </View>
+
+                  <View style={styles.rowInputs}>
+                    <View style={[styles.inputGroup, styles.halfWidth]}>
+                      <Text style={styles.inputLabel}>City</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        value={editedUser.city}
+                        onChangeText={(text) =>
+                          setEditedUser({ ...editedUser, city: text })
+                        }
+                        placeholder="City"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+
+                    <View style={[styles.inputGroup, styles.halfWidth]}>
+                      <Text style={styles.inputLabel}>State</Text>
+                      <TextInput
+                        style={styles.textInput}
+                        value={editedUser.state}
+                        onChangeText={(text) =>
+                          setEditedUser({ ...editedUser, state: text })
+                        }
+                        placeholder="State"
+                        placeholderTextColor="#999"
+                      />
+                    </View>
+                  </View>
+
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.inputLabel}>PIN Code</Text>
+                    <TextInput
+                      style={styles.textInput}
+                      value={editedUser.pincode}
+                      onChangeText={(text) =>
+                        setEditedUser({ ...editedUser, pincode: text })
+                      }
+                      placeholder="Enter PIN code"
+                      placeholderTextColor="#999"
+                      keyboardType="numeric"
+                      maxLength={6}
+                    />
+                  </View>
+                </>
+              ) : (
+                // View Mode - Display Information
+                <View style={styles.personalInfoContainer}>
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Full Name</Text>
+                    <Text style={styles.detailValue}>
+                      {user?.name || "Not specified"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Email Address</Text>
+                    <Text style={styles.detailValue}>
+                      {user?.email || "Not specified"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Contact Number</Text>
+                    <Text style={styles.detailValue}>
+                      {user?.contactNumber || "Not specified"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Date of Birth</Text>
+                    <Text style={styles.detailValue}>
+                      {user?.dateOfBirth || "Not specified"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>Address</Text>
+                    <Text style={styles.detailValue}>
+                      {user?.address || "Not specified"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>City</Text>
+                    <Text style={styles.detailValue}>
+                      {user?.city || "Not specified"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>State</Text>
+                    <Text style={styles.detailValue}>
+                      {user?.state || "Not specified"}
+                    </Text>
+                  </View>
+
+                  <View style={styles.detailItem}>
+                    <Text style={styles.detailLabel}>PIN Code</Text>
+                    <Text style={styles.detailValue}>
+                      {user?.pincode || "Not specified"}
+                    </Text>
+                  </View>
+                </View>
+              )}
+
+              <View style={styles.bottomSpacing} />
+            </View>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </Modal>
   );
+  <Modal
+    visible={isEditModalVisible}
+    animationType="slide"
+    presentationStyle="pageSheet"
+  >
+    <SafeAreaView style={styles.modalContainer}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={styles.modalContainer}
+      >
+        {/* Modal Header */}
+        <View style={styles.modalHeader}>
+          <TouchableOpacity
+            onPress={() => setEditModalVisible(false)}
+            style={styles.modalCancelButton}
+          >
+            <Text style={styles.modalCancelText}>Cancel</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Edit Profile</Text>
+          <TouchableOpacity
+            onPress={handleSaveProfile}
+            style={styles.modalSaveButton}
+            disabled={isLoading}
+          >
+            <Text style={styles.modalSaveText}>
+              {isLoading ? "Saving..." : "Save"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={styles.modalContent}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* Profile Image */}
+          <View style={styles.modalProfileImageContainer}>
+            <View style={styles.modalProfileImage}>
+              <Text style={styles.modalProfileInitials}>
+                {editedUser.firstName?.charAt(0) ||
+                  editedUser.name?.charAt(0) ||
+                  "U"}
+              </Text>
+            </View>
+            <TouchableOpacity style={styles.modalCameraButton}>
+              <Ionicons name="camera" size={16} color="#FFF" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Form Fields */}
+          <View style={styles.formContainer}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Full Name *</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editedUser.name}
+                onChangeText={(text) =>
+                  setEditedUser({ ...editedUser, name: text })
+                }
+                placeholder="Enter your full name"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Email Address *</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editedUser.email}
+                onChangeText={(text) =>
+                  setEditedUser({ ...editedUser, email: text })
+                }
+                placeholder="Enter your email"
+                placeholderTextColor="#999"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Contact Number *</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editedUser.contactNumber}
+                onChangeText={(text) =>
+                  setEditedUser({ ...editedUser, contactNumber: text })
+                }
+                placeholder="Enter your phone number"
+                placeholderTextColor="#999"
+                keyboardType="phone-pad"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Date of Birth</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editedUser.dateOfBirth}
+                onChangeText={(text) =>
+                  setEditedUser({ ...editedUser, dateOfBirth: text })
+                }
+                placeholder="DD/MM/YYYY"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Address</Text>
+              <TextInput
+                style={[styles.textInput, styles.textArea]}
+                value={editedUser.address}
+                onChangeText={(text) =>
+                  setEditedUser({ ...editedUser, address: text })
+                }
+                placeholder="Enter your address"
+                placeholderTextColor="#999"
+                multiline
+                numberOfLines={3}
+              />
+            </View>
+
+            <View style={styles.rowInputs}>
+              <View style={[styles.inputGroup, styles.halfWidth]}>
+                <Text style={styles.inputLabel}>City</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={editedUser.city}
+                  onChangeText={(text) =>
+                    setEditedUser({ ...editedUser, city: text })
+                  }
+                  placeholder="City"
+                  placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={[styles.inputGroup, styles.halfWidth]}>
+                <Text style={styles.inputLabel}>State</Text>
+                <TextInput
+                  style={styles.textInput}
+                  value={editedUser.state}
+                  onChangeText={(text) =>
+                    setEditedUser({ ...editedUser, state: text })
+                  }
+                  placeholder="State"
+                  placeholderTextColor="#999"
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>PIN Code</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editedUser.pincode}
+                onChangeText={(text) =>
+                  setEditedUser({ ...editedUser, pincode: text })
+                }
+                placeholder="Enter PIN code"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+                maxLength={6}
+              />
+            </View>
+
+            <View style={styles.bottomSpacing} />
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
+  </Modal>;
 
   return (
     <SafeAreaView style={styles.container}>
@@ -89,7 +574,7 @@ const ProfileScreen = ({ route }) => {
         <Text style={styles.headerTitle}>Profile</Text>
         <TouchableOpacity
           style={styles.editButton}
-          onPress={() => navigation.navigate("EditProfile")}
+          onPress={() => setPersonalInfoVisible(true)}
         >
           <MaterialIcons name="edit" size={20} color="#9370DB" />
         </TouchableOpacity>
@@ -100,9 +585,7 @@ const ProfileScreen = ({ route }) => {
         <View style={styles.profileCard}>
           <View style={styles.profileImageContainer}>
             <View style={styles.profileImage}>
-              <Text style={styles.profileInitials}>
-                {user?.firstName?.charAt(0) || ""}
-              </Text>
+              <Text style={styles.profileInitials}>{getInitials()}</Text>
             </View>
             <TouchableOpacity style={styles.cameraButton}>
               <Ionicons name="camera" size={16} color="#FFF" />
@@ -110,153 +593,89 @@ const ProfileScreen = ({ route }) => {
           </View>
 
           <View style={styles.profileInfo}>
-            <Text style={styles.userName}>{user?.name}</Text>
-            <Text style={styles.userPhone}>{user?.email}</Text>
-            <Text style={styles.userPhone}>{user?.contactNumber}</Text>
+            <Text style={styles.userName}>{user?.name || "User Name"}</Text>
+            <Text style={styles.userPhone}>
+              {user?.email || "user@email.com"}
+            </Text>
+            <Text style={styles.userPhone}>
+              {user?.contactNumber || "+91 9876543210"}
+            </Text>
+            {user?.city && user?.state && (
+              <Text style={styles.userPhone}>
+                {user.city}, {user.state}
+              </Text>
+            )}
           </View>
         </View>
 
-        {/* Options Section */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Account</Text>
+        {/* Menu Options */}
+        <View style={styles.optionsContainer}>
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => setPersonalInfoVisible(true)}
+          >
+            <View style={styles.optionIcon}>
+              <Ionicons name="person-outline" size={22} color="#9370DB" />
+            </View>
+            <Text style={styles.optionText}>Personal Info</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
 
-          <View style={styles.optionsContainer}>
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => navigation.navigate("PersonalInfo")}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons name="person-outline" size={22} color="#9370DB" />
-              </View>
-              <Text style={styles.optionText}>Personal Info</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.optionItem}>
+            <View style={styles.optionIcon}>
+              <Ionicons name="calendar-outline" size={22} color="#9370DB" />
+            </View>
+            <Text style={styles.optionText}>Appointments</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => navigation.navigate("SavedAddresses")}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons name="location-outline" size={22} color="#9370DB" />
-              </View>
-              <Text style={styles.optionText}>Saved Addresses</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
-            </TouchableOpacity>
+          <TouchableOpacity style={styles.optionItem}>
+            <View style={styles.optionIcon}>
+              <Ionicons name="time-outline" size={22} color="#9370DB" />
+            </View>
+            <Text style={styles.optionText}>Past Bookings</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => navigation.navigate("PaymentMethods")}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons name="card-outline" size={22} color="#9370DB" />
-              </View>
-              <Text style={styles.optionText}>Payment Methods</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
-            </TouchableOpacity>
-          </View>
-        </View>
+          <TouchableOpacity style={styles.optionItem}>
+            <View style={styles.optionIcon}>
+              <Ionicons name="ticket-outline" size={22} color="#9370DB" />
+            </View>
+            <Text style={styles.optionText}>My Coupons</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
 
-        {/* Preferences Section */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Preferences</Text>
+          <TouchableOpacity style={styles.optionItem}>
+            <View style={styles.optionIcon}>
+              <Ionicons name="settings-outline" size={22} color="#9370DB" />
+            </View>
+            <Text style={styles.optionText}>Settings</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
 
-          <View style={styles.optionsContainer}>
-            <View style={styles.optionItem}>
-              <View style={styles.optionIcon}>
-                <Ionicons
-                  name="notifications-outline"
-                  size={22}
-                  color="#9370DB"
-                />
-              </View>
-              <Text style={styles.optionText}>Notifications</Text>
-              <Switch
-                trackColor={{ false: "#E0E0E0", true: "#D4C1F9" }}
-                thumbColor={notificationsEnabled ? "#9370DB" : "#FFF"}
-                onValueChange={toggleNotifications}
-                value={notificationsEnabled}
+          <TouchableOpacity style={styles.optionItem}>
+            <View style={styles.optionIcon}>
+              <Ionicons
+                name="chatbubble-ellipses-outline"
+                size={22}
+                color="#9370DB"
               />
             </View>
+            <Text style={styles.optionText}>Contact Us</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => navigation.navigate("AppSettings")}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons name="settings-outline" size={22} color="#9370DB" />
-              </View>
-              <Text style={styles.optionText}>App Settings</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* Recent Appointments Section */}
-        <View style={styles.sectionContainer}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Recent Appointments</Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("AllAppointments")}
-            >
-              <Text style={styles.seeAllText}>See all</Text>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.appointmentsContainer}>
-            {RECENT_APPOINTMENTS.map((item) => renderAppointmentItem(item))}
-          </View>
-        </View>
-
-        {/* Help & Support Section */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Help & Support</Text>
-
-          <View style={styles.optionsContainer}>
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => navigation.navigate("HelpCenter")}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons
-                  name="help-circle-outline"
-                  size={22}
-                  color="#9370DB"
-                />
-              </View>
-              <Text style={styles.optionText}>Help Center</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => navigation.navigate("ContactUs")}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons
-                  name="chatbubble-ellipses-outline"
-                  size={22}
-                  color="#9370DB"
-                />
-              </View>
-              <Text style={styles.optionText}>Contact Us</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.optionItem}
-              onPress={() => navigation.navigate("PrivacyPolicy")}
-            >
-              <View style={styles.optionIcon}>
-                <Ionicons
-                  name="shield-checkmark-outline"
-                  size={22}
-                  color="#9370DB"
-                />
-              </View>
-              <Text style={styles.optionText}>Privacy Policy</Text>
-              <Ionicons name="chevron-forward" size={18} color="#999" />
-            </TouchableOpacity>
-          </View>
+          <TouchableOpacity style={styles.optionItem}>
+            <View style={styles.optionIcon}>
+              <Ionicons
+                name="shield-checkmark-outline"
+                size={22}
+                color="#9370DB"
+              />
+            </View>
+            <Text style={styles.optionText}>Privacy Policy</Text>
+            <Ionicons name="chevron-forward" size={18} color="#999" />
+          </TouchableOpacity>
         </View>
 
         {/* Log Out Button */}
@@ -302,6 +721,9 @@ const ProfileScreen = ({ route }) => {
           <Text style={styles.activeTabText}>Profile</Text>
         </TouchableOpacity>
       </View>
+
+      {/* Personal Information Screen */}
+      {renderPersonalInfoScreen()}
     </SafeAreaView>
   );
 };
@@ -340,7 +762,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 20,
     backgroundColor: "#FFF",
-    marginBottom: 15,
+    marginBottom: 20,
   },
   profileImageContainer: {
     position: "relative",
@@ -373,6 +795,7 @@ const styles = StyleSheet.create({
   },
   profileInfo: {
     marginLeft: 15,
+    flex: 1,
   },
   userName: {
     fontSize: 18,
@@ -383,33 +806,50 @@ const styles = StyleSheet.create({
   userPhone: {
     fontSize: 14,
     color: "#666",
+    marginBottom: 2,
   },
-  sectionContainer: {
-    marginBottom: 15,
+  personalInfoContainer: {
+    backgroundColor: "#FFF",
+    borderRadius: 10,
   },
-  sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    marginBottom: 10,
+  detailsContainer: {
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    marginHorizontal: 20,
+    marginBottom: 20,
+    paddingVertical: 20,
   },
   sectionTitle: {
     fontSize: 16,
     fontWeight: "bold",
     color: "#333",
     paddingHorizontal: 20,
-    marginBottom: 10,
+    marginBottom: 15,
   },
-  seeAllText: {
-    fontSize: 14,
-    color: "#9370DB",
+  detailItem: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  detailLabel: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 4,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  detailValue: {
+    fontSize: 16,
+    color: "#333",
+    fontWeight: "500",
   },
   optionsContainer: {
     backgroundColor: "#FFF",
     borderRadius: 10,
     marginHorizontal: 20,
     overflow: "hidden",
+    marginBottom: 20,
   },
   optionItem: {
     flexDirection: "row",
@@ -430,83 +870,24 @@ const styles = StyleSheet.create({
   },
   optionText: {
     flex: 1,
-    fontSize: 14,
-    color: "#333",
-  },
-  appointmentsContainer: {
-    paddingHorizontal: 20,
-  },
-  appointmentCard: {
-    backgroundColor: "#FFF",
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowOffset: { width: 0, height: 2 },
-    shadowRadius: 5,
-    elevation: 2,
-  },
-  appointmentHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  salonName: {
     fontSize: 16,
-    fontWeight: "bold",
     color: "#333",
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  completedStatus: {
-    backgroundColor: "#E6F7EE",
-  },
-  upcomingStatus: {
-    backgroundColor: "#FFF8E6",
-  },
-  statusText: {
-    fontSize: 12,
     fontWeight: "500",
-    color: "#00A86B",
-  },
-  appointmentDetails: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  serviceInfo: {
-    flex: 1,
-  },
-  serviceText: {
-    fontSize: 14,
-    color: "#555",
-    marginBottom: 5,
-  },
-  appointmentTime: {
-    fontSize: 12,
-    color: "#888",
-  },
-  priceText: {
-    fontSize: 16,
-    fontWeight: "bold",
-    color: "#9370DB",
   },
   logoutButton: {
     marginHorizontal: 20,
-    marginVertical: 20,
+    marginVertical: 10,
     paddingVertical: 15,
     backgroundColor: "#FFF",
     borderRadius: 10,
     alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#FF3B30",
   },
   logoutText: {
     fontSize: 16,
     color: "#FF3B30",
-    fontWeight: "500",
+    fontWeight: "600",
   },
   bottomSpacing: {
     height: 70,
@@ -538,6 +919,111 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: "#9370DB",
     marginTop: 3,
+  },
+  // Modal Styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#F8F8F8",
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    backgroundColor: "#FFF",
+    borderBottomWidth: 1,
+    borderBottomColor: "#F0F0F0",
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#000",
+  },
+  modalCancelButton: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  modalCancelText: {
+    fontSize: 16,
+    color: "#9370DB",
+  },
+  modalSaveButton: {
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+  },
+  modalSaveText: {
+    fontSize: 16,
+    color: "#9370DB",
+    fontWeight: "600",
+  },
+  modalContent: {
+    flex: 1,
+    paddingTop: 20,
+  },
+  modalProfileImageContainer: {
+    alignItems: "center",
+    marginBottom: 30,
+    position: "relative",
+  },
+  modalProfileImage: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    backgroundColor: "#9370DB",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalProfileInitials: {
+    fontSize: 40,
+    fontWeight: "bold",
+    color: "#FFF",
+  },
+  modalCameraButton: {
+    position: "absolute",
+    bottom: 0,
+    right: "35%",
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "#9370DB",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 3,
+    borderColor: "#FFF",
+  },
+  formContainer: {
+    paddingHorizontal: 20,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  textInput: {
+    backgroundColor: "#FFF",
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: "#333",
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: "top",
+  },
+  rowInputs: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+  halfWidth: {
+    width: "48%",
   },
 });
 

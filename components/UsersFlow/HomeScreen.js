@@ -184,7 +184,7 @@ const HomeScreen = () => {
     try {
       // Use the provided API endpoint
       const response = await fetch(
-        "http://13.233.157.248:5000/api/shops/getAllShops"
+        "http://43.204.228.20:5000/api/shops/getAllShops"
       );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);

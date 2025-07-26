@@ -8,7 +8,7 @@ import SalonDetailScreen from "./components/UsersFlow/SalonDetailScreen";
 import ProfileScreen from "./components/UsersFlow/ProfileSection";
 import FavouriteScreen from "./components/UsersFlow/FavouriteScreen";
 import LoginScreen from "./components/LoginScreen";
-import PersonalInfoScreen from "./components/UsersFlow/PersonalInfo";
+import PersonalInfoScreen from "./components/PersonalInfo";
 import SalonOwnerRegistrationScreen from "./components/SalonsFlow/SalonOwnerRegistration";
 import DashboardScreen from "./components/SalonsFlow/DashboardScreen";
 import ServiceManagementScreen from "./components/SalonsFlow/ServiceManagementScreen";
@@ -19,6 +19,7 @@ import SalonProfileScreen from "./components/SalonsFlow/SalonProfileScreen";
 import CustomersView from "./components/SalonsFlow/CustomerViewComponent";
 import CustomerDetailView from "./components/SalonsFlow/CustomerDetailView";
 import SeatsView from "./components/SalonsFlow/SeatsViewmanagement";
+import ManageServicesScreen from "./components/SalonsFlow/ManageServicesScreen";
 
 const Stack = createNativeStackNavigator();
 
@@ -29,9 +30,9 @@ export default function App() {
     const checkUser = async () => {
       const user = await AsyncStorage.getItem("user");
       if (user) {
-        setInitialRoute("SalonDashboard");
+        setInitialRoute("Login");
       } else {
-        setInitialRoute("SalonDashboard");
+        setInitialRoute("Login");
       }
     };
     checkUser();
@@ -130,6 +131,11 @@ export default function App() {
         <Stack.Screen
           name="profile"
           component={SalonProfileScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="ManageServices"
+          component={ManageServicesScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

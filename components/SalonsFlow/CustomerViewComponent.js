@@ -220,12 +220,12 @@ const CustomersView = (props) => {
               { backgroundColor: isUpcoming ? "#16a34a" : "#6b7280" },
             ]}
           >
-            <Icon name="person" size={20} color="white" />
+            <Icon name="person" size={16} color="white" />
           </View>
           <View style={styles.customerInfo}>
             <Text style={styles.customerName}>{customer.name}</Text>
             <View style={styles.timeContainer}>
-              <Icon name="schedule" size={16} color="#6b7280" />
+              <Icon name="schedule" size={12} color="#6b7280" />
               <Text style={styles.timeText}>{customer.time}</Text>
             </View>
           </View>
@@ -298,40 +298,30 @@ const CustomersView = (props) => {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Cards */}
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <View
-              style={[styles.statIconContainer, { backgroundColor: "#dcfce7" }]}
-            >
-              <Icon name="schedule" size={24} color="#16a34a" />
+        {/* Compact Stats Row */}
+        <View style={styles.compactStatsContainer}>
+          <View style={styles.compactStatItem}>
+            <View style={styles.compactStatIcon}>
+              <Icon name="schedule" size={16} color="#16a34a" />
             </View>
-            <View style={styles.statTextContainer}>
-              <Text style={styles.statNumber}>{totalUpcoming}</Text>
-              <Text style={styles.statLabel}>Upcoming</Text>
-            </View>
+            <Text style={styles.compactStatNumber}>{totalUpcoming}</Text>
+            <Text style={styles.compactStatLabel}>Upcoming</Text>
           </View>
-          <View style={styles.statCard}>
-            <View
-              style={[styles.statIconContainer, { backgroundColor: "#f3f4f6" }]}
-            >
-              <Icon name="check-circle" size={24} color="#6b7280" />
+          <View style={styles.compactStatItem}>
+            <View style={styles.compactStatIcon}>
+              <Icon name="check-circle" size={16} color="#6b7280" />
             </View>
-            <View style={styles.statTextContainer}>
-              <Text style={styles.statNumber}>{totalCompleted}</Text>
-              <Text style={styles.statLabel}>Completed</Text>
-            </View>
+            <Text style={styles.compactStatNumber}>{totalCompleted}</Text>
+            <Text style={styles.compactStatLabel}>Completed</Text>
           </View>
-          <View style={styles.statCard}>
-            <View style={styles.statIconContainer}>
-              <Icon name="people" size={24} color="#3b82f6" />
+          <View style={styles.compactStatItem}>
+            <View style={styles.compactStatIcon}>
+              <Icon name="people" size={16} color="#3b82f6" />
             </View>
-            <View style={styles.statTextContainer}>
-              <Text style={styles.statNumber}>
-                {totalUpcoming + totalCompleted}
-              </Text>
-              <Text style={styles.statLabel}>Total</Text>
-            </View>
+            <Text style={styles.compactStatNumber}>
+              {totalUpcoming + totalCompleted}
+            </Text>
+            <Text style={styles.compactStatLabel}>Total</Text>
           </View>
         </View>
 
@@ -413,8 +403,8 @@ const CustomersView = (props) => {
           {displayUpcoming.length > 0 && (
             <View style={styles.sectionContainer}>
               <View style={styles.sectionHeader}>
-                <Icon name="schedule" size={20} color="#16a34a" />
-                <Text style={styles.sectionTitle}>Upcoming Appointments</Text>
+                <Icon name="schedule" size={18} color="#16a34a" />
+                <Text style={styles.sectionTitle}>Upcoming</Text>
                 <View style={styles.sectionBadge}>
                   <Text style={styles.sectionBadgeText}>
                     {displayUpcoming.length}
@@ -431,8 +421,8 @@ const CustomersView = (props) => {
           {displayCompleted.length > 0 && (
             <View style={styles.sectionContainer}>
               <View style={styles.sectionHeader}>
-                <Icon name="check-circle" size={20} color="#6b7280" />
-                <Text style={styles.sectionTitle}>Completed Services</Text>
+                <Icon name="check-circle" size={18} color="#6b7280" />
+                <Text style={styles.sectionTitle}>Completed</Text>
                 <View
                   style={[styles.sectionBadge, { backgroundColor: "#f3f4f6" }]}
                 >
@@ -511,58 +501,54 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
 
-  // Stats Cards
-  statsContainer: {
+  // Compact Stats Row
+  compactStatsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  statCard: {
+    justifyContent: "space-around",
     backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 16,
-    flex: 1,
-    marginHorizontal: 4,
-    flexDirection: "row",
-    alignItems: "center",
+    marginHorizontal: 20,
+    marginVertical: 12,
+    borderRadius: 12,
+    paddingVertical: 12,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  compactStatItem: {
+    alignItems: "center",
+    flex: 1,
+  },
+  compactStatIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
     backgroundColor: "#f8fafc",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginBottom: 4,
   },
-  statTextContainer: {
-    flex: 1,
-  },
-  statNumber: {
-    fontSize: 20,
+  compactStatNumber: {
+    fontSize: 18,
     fontWeight: "700",
     color: "#1f2937",
+    marginBottom: 2,
   },
-  statLabel: {
-    fontSize: 12,
+  compactStatLabel: {
+    fontSize: 11,
     color: "#6b7280",
-    marginTop: 2,
+    fontWeight: "500",
   },
 
   // Filter Section
   filterSection: {
     backgroundColor: "#ffffff",
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingVertical: 12,
     borderRadius: 16,
     marginHorizontal: 20,
-    marginBottom: 20,
+    marginBottom: 16,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -571,7 +557,7 @@ const styles = StyleSheet.create({
   },
   filterButtons: {
     flexDirection: "row",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   filterButton: {
     paddingHorizontal: 16,
@@ -592,7 +578,7 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
   searchContainer: {
-    marginTop: 8,
+    marginTop: 4,
   },
   searchBox: {
     flexDirection: "row",
@@ -620,36 +606,36 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
   },
   sectionContainer: {
-    marginBottom: 24,
+    marginBottom: 16,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: "#1f2937",
-    marginLeft: 8,
+    marginLeft: 6,
     flex: 1,
   },
   sectionBadge: {
     backgroundColor: "#dcfce7",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
   },
   sectionBadgeText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
     color: "#16a34a",
   },
 
-  // Customer Cards
+  // Customer Cards - Reduced padding
   customerCard: {
-    borderRadius: 16,
-    marginBottom: 12,
+    borderRadius: 12,
+    marginBottom: 8,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -658,84 +644,84 @@ const styles = StyleSheet.create({
   },
   upcomingCard: {
     backgroundColor: "#f0fdf4",
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: "#16a34a",
   },
   completedCard: {
     backgroundColor: "#ffffff",
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: "#e5e7eb",
   },
   customerContent: {
-    padding: 16,
+    padding: 12,
   },
   customerHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   customerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: 10,
   },
   customerInfo: {
     flex: 1,
   },
   customerName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     color: "#1f2937",
-    marginBottom: 4,
+    marginBottom: 2,
   },
   timeContainer: {
     flexDirection: "row",
     alignItems: "center",
   },
   timeText: {
-    fontSize: 14,
+    fontSize: 12,
     color: "#6b7280",
-    marginLeft: 4,
+    marginLeft: 3,
     fontWeight: "500",
   },
   statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   statusText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "600",
     textTransform: "uppercase",
   },
   servicesContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 12,
+    marginBottom: 8,
   },
   serviceTag: {
     backgroundColor: "#f3f4f6",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginRight: 8,
-    marginBottom: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: 6,
+    marginBottom: 3,
     flexDirection: "row",
     alignItems: "center",
   },
   serviceText: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#374151",
     fontWeight: "500",
   },
   servicePrice: {
-    fontSize: 12,
+    fontSize: 11,
     color: "#9370DB",
     fontWeight: "600",
-    marginLeft: 4,
+    marginLeft: 3,
   },
   customerFooter: {
     flexDirection: "row",
@@ -743,11 +729,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   servicesCount: {
-    fontSize: 14,
+    fontSize: 12,
     color: "#6b7280",
   },
   totalAmount: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
     color: "#9370DB",
   },
