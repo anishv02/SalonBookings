@@ -30,8 +30,11 @@ const ProfileScreen = ({ navigation }) => {
   });
 
   const [showSalonDetails, setShowSalonDetails] = useState(false);
+  const [showOperationalSettings, setShowOperationalSettings] = useState(false);
   const [editableData, setEditableData] = useState({});
+  const [operationalData, setOperationalData] = useState({});
   const [isEditing, setIsEditing] = useState(false);
+  const [isEditingOperational, setIsEditingOperational] = useState(false);
 
   const handleBackPress = () => {
     navigation.navigate("SalonDashboard");
@@ -43,10 +46,61 @@ const ProfileScreen = ({ navigation }) => {
     setShowSalonDetails(true);
   };
 
+  const handleOperationalSettingsPress = () => {
+    setOperationalData({
+      openTime: salonData.openTime,
+      closeTime: salonData.closeTime,
+      seatCount: salonData.seatCount,
+    });
+    setIsEditingOperational(false);
+    setShowOperationalSettings(true);
+  };
+
   const handleSaveChanges = () => {
     setSalonData({ ...editableData });
     setIsEditing(false);
     Alert.alert("Success", "Salon details updated successfully!");
+  };
+
+  const handleSaveOperationalChanges = async () => {
+    // Validation
+    if (!operationalData.openTime || !operationalData.closeTime) {
+      Alert.alert("Error", "Please enter both opening and closing times");
+      return;
+    }
+
+    if (!operationalData.seatCount || parseInt(operationalData.seatCount) < 1) {
+      Alert.alert("Error", "Seat count must be at least 1");
+      return;
+    }
+
+    try {
+      // Here you would make API call to update operational settings
+      // const response = await fetch(`http://43.204.228.20:5000/api/shops/${salonData._id}/operational`, {
+      //   method: "PUT",
+      //   headers: {
+      //     "Content-Type": "application/json",
+      //   },
+      //   body: JSON.stringify({
+      //     openTime: operationalData.openTime,
+      //     closeTime: operationalData.closeTime,
+      //     seatCount: parseInt(operationalData.seatCount),
+      //   }),
+      // });
+
+      // For now, update locally
+      setSalonData((prev) => ({
+        ...prev,
+        openTime: operationalData.openTime,
+        closeTime: operationalData.closeTime,
+        seatCount: parseInt(operationalData.seatCount),
+      }));
+
+      setIsEditingOperational(false);
+      Alert.alert("Success", "Operational settings updated successfully!");
+    } catch (error) {
+      Alert.alert("Error", "Failed to update operational settings");
+    }
   };
 
   const handleCancelEdit = () => {
@@ -54,8 +108,24 @@ const ProfileScreen = ({ navigation }) => {
     setIsEditing(false);
   };
 
+  const handleCancelOperationalEdit = () => {
+    setOperationalData({
+      openTime: salonData.openTime,
+      closeTime: salonData.closeTime,
+      seatCount: salonData.seatCount,
+    });
+    setIsEditingOperational(false);
+  };
+
   const updateField = (field, value) => {
     setEditableData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const updateOperationalField = (field, value) => {
+    setOperationalData((prev) => ({
       ...prev,
       [field]: value,
     }));
@@ -82,6 +152,29 @@ const ProfileScreen = ({ navigation }) => {
       setShowSalonDetails(false);
     }
   };
+
+  const handleCloseOperationalModal = () => {
+    if (isEditingOperational) {
+      Alert.alert(
+        "Unsaved Changes",
+        "You have unsaved changes. Do you want to discard them?",
+        [
+          { text: "Cancel", style: "cancel" },
+          {
+            text: "Discard",
+            style: "destructive",
+            onPress: () => {
+              setIsEditingOperational(false);
+              setShowOperationalSettings(false);
+            },
+          },
+        ]
+      );
+    } else {
+      setShowOperationalSettings(false);
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
@@ -120,6 +213,147 @@ const ProfileScreen = ({ navigation }) => {
     </View>
   );
 
+  const renderOperationalField = (
+    label,
+    field,
+    placeholder,
+    keyboardType = "default"
+  ) => (
+    <View style={styles.fieldContainer}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      {isEditingOperational ? (
+        <TextInput
+          style={styles.editInput}
+          value={operationalData[field]?.toString()}
+          onChangeText={(value) => updateOperationalField(field, value)}
+          placeholder={placeholder}
+          keyboardType={keyboardType}
+        />
+      ) : (
+        <Text style={styles.fieldValue}>
+          {operationalData[field]?.toString() || "Not set"}
+        </Text>
+      )}
+    </View>
+  );
+
+  const OperationalSettingsModal = () => (
+    <Modal
+      visible={showOperationalSettings}
+      animationType="slide"
+      presentationStyle="pageSheet"
+    >
+      <View style={styles.modalContainer}>
+        {/* Header */}
+        <View style={styles.modalHeader}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleCloseOperationalModal}
+          >
+            <Text style={styles.backIcon}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.modalTitle}>Operational Settings</Text>
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={() =>
+              isEditingOperational
+                ? handleSaveOperationalChanges()
+                : setIsEditingOperational(true)
+            }
+          >
+            <Text style={styles.editButtonText}>
+              {isEditingOperational ? "Save" : "Edit"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        <ScrollView
+          style={styles.modalContent}
+          showsVerticalScrollIndicator={true}
+        >
+          {/* Operating Hours */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Operating Hours</Text>
+            <Text style={styles.sectionDescription}>
+              Set your salon's daily operating hours
+            </Text>
+
+            {renderOperationalField(
+              "Opening Time",
+              "openTime",
+              "09:30 (HH:MM format)"
+            )}
+            {renderOperationalField(
+              "Closing Time",
+              "closeTime",
+              "22:30 (HH:MM format)"
+            )}
+          </View>
+
+          {/* Capacity Management */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Capacity Management</Text>
+            <Text style={styles.sectionDescription}>
+              Manage the number of available seats in your salon
+            </Text>
+
+            {renderOperationalField(
+              "Number of Seats",
+              "seatCount",
+              "Enter number of seats",
+              "numeric"
+            )}
+
+            {!isEditingOperational && (
+              <View style={styles.infoContainer}>
+                <Text style={styles.infoTitle}>Current Status:</Text>
+                <Text style={styles.infoText}>
+                  • Operating: {operationalData.openTime} -{" "}
+                  {operationalData.closeTime}
+                </Text>
+                <Text style={styles.infoText}>
+                  • Available Seats: {operationalData.seatCount}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {isEditingOperational && (
+            <View style={styles.section}>
+              <Text style={styles.warningTitle}>⚠️ Important Notes</Text>
+              <Text style={styles.warningText}>
+                • Changing operating hours will affect future bookings
+              </Text>
+              <Text style={styles.warningText}>
+                • Reducing seat count may impact existing appointments
+              </Text>
+              <Text style={styles.warningText}>
+                • Use 24-hour format for time (e.g., 09:30, 22:30)
+              </Text>
+            </View>
+          )}
+
+          {isEditingOperational && (
+            <View style={styles.buttonContainer}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={handleCancelOperationalEdit}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={handleSaveOperationalChanges}
+              >
+                <Text style={styles.saveButtonText}>Save Changes</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+
   const SalonDetailsModal = () => (
     <Modal
       visible={showSalonDetails}
@@ -131,7 +365,7 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.modalHeader}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => setShowSalonDetails(false)}
+            onPress={handleCloseModal}
           >
             <Text style={styles.backIcon}>‹</Text>
           </TouchableOpacity>
@@ -246,21 +480,6 @@ const ProfileScreen = ({ navigation }) => {
                 </Text>
               )}
             </View>
-
-            {renderEditableField(
-              "Seat Count",
-              "seatCount",
-              "Enter number of seats",
-              "numeric"
-            )}
-          </View>
-
-          {/* Operating Hours */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Operating Hours</Text>
-
-            {renderEditableField("Opening Time", "openTime", "HH:MM format")}
-            {renderEditableField("Closing Time", "closeTime", "HH:MM format")}
           </View>
 
           {/* Additional Info */}
@@ -355,6 +574,22 @@ const ProfileScreen = ({ navigation }) => {
           />
 
           <ProfileItem
+            icon="⏰"
+            title="Operational Settings"
+            subtitle={`${salonData.openTime}-${salonData.closeTime} • ${salonData.seatCount} seats`}
+            onPress={handleOperationalSettingsPress}
+          />
+
+          <ProfileItem
+            icon="📅"
+            title="Schedule Management"
+            subtitle="Manage off days and custom timings"
+            onPress={() =>
+              navigation.navigate("ScheduleManagement", { salonData })
+            }
+          />
+
+          <ProfileItem
             icon="✂️"
             title="Services"
             subtitle="Manage your salon services"
@@ -399,6 +634,7 @@ const ProfileScreen = ({ navigation }) => {
         </View>
 
         <SalonDetailsModal />
+        <OperationalSettingsModal />
       </ScrollView>
     </View>
   );
@@ -595,6 +831,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     color: "#333",
+    marginBottom: 8,
+  },
+  sectionDescription: {
+    fontSize: 14,
+    color: "#666",
     marginBottom: 20,
   },
   fieldContainer: {
@@ -649,6 +890,37 @@ const styles = StyleSheet.create({
   radioText: {
     fontSize: 16,
     color: "#333",
+  },
+  infoContainer: {
+    backgroundColor: "#f8f9fa",
+    padding: 16,
+    borderRadius: 8,
+    marginTop: 10,
+    borderLeftWidth: 4,
+    borderLeftColor: "#9370DB",
+  },
+  infoTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+  },
+  infoText: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 4,
+  },
+  warningTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#FF5722",
+    marginBottom: 12,
+  },
+  warningText: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 8,
+    lineHeight: 20,
   },
   buttonContainer: {
     flexDirection: "row",

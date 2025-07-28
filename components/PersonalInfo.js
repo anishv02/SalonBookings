@@ -18,16 +18,16 @@ const PersonalInfoScreen = ({ navigation }) => {
   const [isSalonOwner, setIsSalonOwner] = useState(null);
 
   const handleContinue = async () => {
-    if (
-      !name ||
-      !email ||
-      !contactNumber ||
-      !password ||
-      isSalonOwner === null
-    ) {
-      Alert.alert("All fields are required");
-      return;
-    }
+    // if (
+    //   !name ||
+    //   !email ||
+    //   !contactNumber ||
+    //   !password ||
+    //   isSalonOwner === null
+    // ) {
+    //   Alert.alert("All fields are required");
+    //   return;
+    // }
 
     // Prepare userType based on radio selection
     const userType = isSalonOwner ? "Owner" : "User";

@@ -28,6 +28,14 @@ const CATEGORIES = [
   { id: "5", name: "Makeup", icon: "magic" },
 ];
 
+// Filter options for salon types
+const FILTER_OPTIONS = [
+  { id: "all", name: "All", value: null },
+  { id: "men", name: "Men", value: "Men" },
+  { id: "women", name: "Women", value: "Women" },
+  { id: "unisex", name: "Unisex", value: "Unisex" },
+];
+
 // Helper function to calculate distance between two lat/lng points (Haversine formula)
 function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   const R = 6371; // Radius of the earth in km
@@ -46,15 +54,26 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
 const HomeScreen = () => {
   const navigation = useNavigation();
   const [userName, setUserName] = useState("John");
-  const [nearbySalons, setNearbySalons] = useState([]);
+  const [allSalons, setAllSalons] = useState([]); // Store all salons
+  const [nearbySalons, setNearbySalons] = useState([]); // Store filtered salons
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // Filter states
+  const [selectedFilter, setSelectedFilter] = useState("all");
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   // Location states
   const [location, setLocation] = useState(null);
   const [locationPermission, setLocationPermission] = useState(null);
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState(null);
+
+  // Manual location selection states
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [manualLocationInput, setManualLocationInput] = useState("");
+  const [selectedCity, setSelectedCity] = useState(""); // Current city being used for API
+  const [isManualLocation, setIsManualLocation] = useState(false);
 
   // Request location permission
   const requestLocationPermission = async () => {
@@ -176,8 +195,70 @@ const HomeScreen = () => {
     }
   };
 
-  // Fetch salon data from API (updated to include location)
-  const fetchSalonData = async (userCoords) => {
+  // Handle manual location selection
+  const handleManualLocationSubmit = () => {
+    if (manualLocationInput.trim()) {
+      setSelectedCity(manualLocationInput.trim());
+      setIsManualLocation(true);
+      setShowLocationModal(false);
+
+      // Here you would call your API with the manual city
+      // For now, we'll just fetch with the existing logic
+      fetchSalonData(location, manualLocationInput.trim());
+
+      // Clear the input for next time
+      setManualLocationInput("");
+    }
+  };
+
+  // Handle location change/reset
+  const handleLocationChange = () => {
+    setShowLocationModal(true);
+  };
+
+  // Reset to current location
+  const resetToCurrentLocation = async () => {
+    setIsManualLocation(false);
+    setSelectedCity("");
+    setShowLocationModal(false);
+
+    if (location) {
+      // Use existing location
+      fetchSalonData(location);
+    } else {
+      // Get fresh location
+      const userLocation = await getCurrentLocation();
+      fetchSalonData(userLocation);
+    }
+  };
+  const applyFilter = (salonsData, filterType) => {
+    if (!filterType || filterType === "all") {
+      return salonsData;
+    }
+
+    return salonsData.filter((salon) => {
+      // Check if salon has salonType field and matches the filter
+      return (
+        salon.salonType &&
+        salon.salonType.toLowerCase() === filterType.toLowerCase()
+      );
+    });
+  };
+
+  // Handle filter selection
+  const handleFilterSelect = (filterId) => {
+    setSelectedFilter(filterId);
+    setShowFilterDropdown(false);
+
+    const filterOption = FILTER_OPTIONS.find(
+      (option) => option.id === filterId
+    );
+    const filteredSalons = applyFilter(allSalons, filterOption.value);
+    setNearbySalons(filteredSalons);
+  };
+
+  // Fetch salon data from API (updated to handle manual city selection)
+  const fetchSalonData = async (userCoords, manualCity = null) => {
     setLoading(true);
     setError(null);
 
@@ -185,6 +266,8 @@ const HomeScreen = () => {
       // Use the provided API endpoint
       const response = await fetch(
         "http://43.204.228.20:5000/api/shops/getAllShops"
+        // In future, when API is updated, you can send city like:
+        // `http://43.204.228.20:5000/api/shops/getAllShops?city=${manualCity || detectedCity}`
       );
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -200,7 +283,11 @@ const HomeScreen = () => {
 
       let userCity = "";
 
-      if (userCoords && userCoords.latitude && userCoords.longitude) {
+      // Determine the city to use
+      if (manualCity) {
+        userCity = manualCity;
+        setSelectedCity(manualCity);
+      } else if (userCoords && userCoords.latitude && userCoords.longitude) {
         try {
           const geo = await Location.reverseGeocodeAsync({
             latitude: userCoords.latitude,
@@ -208,6 +295,9 @@ const HomeScreen = () => {
           });
           if (geo && geo[0]) {
             userCity = geo[0].city;
+            if (!isManualLocation) {
+              setSelectedCity(userCity);
+            }
           }
         } catch (e) {
           console.log("Error getting city from geolocation", e);
@@ -241,7 +331,36 @@ const HomeScreen = () => {
           });
       }
 
-      setNearbySalons(salonsData);
+      // Store all salons
+      setAllSalons(salonsData);
+
+      // Apply current filter to the salons
+      const filterOption = FILTER_OPTIONS.find(
+        (option) => option.id === selectedFilter
+      );
+      const filteredSalons = applyFilter(salonsData, filterOption.value);
+      setNearbySalons(filteredSalons);
+
+      // Check if no salons found for the current city
+      if (filteredSalons.length === 0 && !manualCity && !isManualLocation) {
+        // Show option to search in different city
+        Alert.alert(
+          "No Salons Found",
+          `No salons found in ${
+            userCity || "your area"
+          }. Would you like to search in a different city?`,
+          [
+            {
+              text: "Search Different City",
+              onPress: () => setShowLocationModal(true),
+            },
+            {
+              text: "Cancel",
+              style: "cancel",
+            },
+          ]
+        );
+      }
     } catch (err) {
       console.error("Error fetching salon data:", err);
       setError(err.message);
@@ -249,7 +368,10 @@ const HomeScreen = () => {
         "Error",
         "Failed to load salon data. Please check your connection and try again.",
         [
-          { text: "Retry", onPress: () => fetchSalonData(userCoords) },
+          {
+            text: "Retry",
+            onPress: () => fetchSalonData(userCoords, manualCity),
+          },
           { text: "Cancel", style: "cancel" },
         ]
       );
@@ -359,6 +481,12 @@ const HomeScreen = () => {
             {item.distance ? `${item.distance} km` : "2.5 km"}
           </Text>
         </View>
+        {/* Show salon type badge */}
+        {item.salonType && (
+          <View style={styles.salonTypeBadge}>
+            <Text style={styles.salonTypeText}>{item.salonType}</Text>
+          </View>
+        )}
       </View>
     </TouchableOpacity>
   );
@@ -384,7 +512,7 @@ const HomeScreen = () => {
     </View>
   );
 
-  // Render location status
+  // Render location status (updated to show manual location option)
   const renderLocationStatus = () => {
     if (locationLoading) {
       return (
@@ -397,7 +525,7 @@ const HomeScreen = () => {
       );
     }
 
-    if (locationError) {
+    if (locationError && !isManualLocation) {
       return (
         <View style={styles.locationStatus}>
           <TouchableOpacity
@@ -407,23 +535,33 @@ const HomeScreen = () => {
             <Ionicons name="location-outline" size={16} color="#9370DB" />
             <Text style={styles.locationRetryText}>Enable Location</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.manualLocationButton}
+            onPress={() => setShowLocationModal(true)}
+          >
+            <Text style={styles.manualLocationText}>Or Search City</Text>
+          </TouchableOpacity>
         </View>
       );
     }
 
-    if (location) {
+    if (selectedCity) {
       return (
         <View style={styles.locationStatus}>
-          <Ionicons name="location" size={16} color="#4CAF50" />
+          <Ionicons
+            name={isManualLocation ? "search" : "location"}
+            size={16}
+            color="#4CAF50"
+          />
           <Text style={styles.locationStatusText}>
-            {location.address
-              ? location.address.name ||
-                location.address.street ||
-                location.address.neighborhood ||
-                location.address.subregion ||
-                `${location.address.city}, ${location.address.region}`
-              : "Location enabled"}
+            {isManualLocation ? `Searching in: ${selectedCity}` : selectedCity}
           </Text>
+          <TouchableOpacity
+            style={styles.changeLocationButton}
+            onPress={handleLocationChange}
+          >
+            <Text style={styles.changeLocationText}>Change</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -431,37 +569,152 @@ const HomeScreen = () => {
     return null;
   };
 
+  const selectedFilterOption = FILTER_OPTIONS.find(
+    (option) => option.id === selectedFilter
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerLeft}>
           <Text style={styles.greetingText}>Hello {userName}!</Text>
           <Text style={styles.welcomeText}>Good Morning!</Text>
-          {/* Show full address if available */}
-          {location && location.address ? (
-            <Text style={styles.locationStatusText}>
-              {[
-                location.address.name,
-                location.address.street,
-                location.address.neighborhood,
-                location.address.subregion,
-                location.address.city,
-                location.address.region,
-                location.address.postalCode,
-                location.address.country,
-              ]
-                .filter(Boolean)
-                .join(", ")}
-            </Text>
-          ) : (
-            renderLocationStatus()
-          )}
+          {renderLocationStatus()}
         </View>
-        <TouchableOpacity style={styles.notificationButton}>
-          <Ionicons name="notifications-outline" size={24} color="black" />
-        </TouchableOpacity>
+
+        <View style={styles.headerRight}>
+          {/* Filter Button */}
+          <TouchableOpacity
+            style={styles.filterButton}
+            onPress={() => setShowFilterDropdown(!showFilterDropdown)}
+          >
+            <Ionicons name="filter" size={20} color="#9370DB" />
+            <Text style={styles.filterButtonText}>
+              {selectedFilterOption?.name}
+            </Text>
+            <Ionicons
+              name={showFilterDropdown ? "chevron-up" : "chevron-down"}
+              size={16}
+              color="#9370DB"
+            />
+          </TouchableOpacity>
+
+          {/* Notification Button */}
+          <TouchableOpacity style={styles.notificationButton}>
+            <Ionicons name="notifications-outline" size={24} color="black" />
+          </TouchableOpacity>
+        </View>
       </View>
+
+      {/* Filter Dropdown */}
+      {showFilterDropdown && (
+        <View style={styles.filterDropdown}>
+          {FILTER_OPTIONS.map((option) => (
+            <TouchableOpacity
+              key={option.id}
+              style={[
+                styles.filterOption,
+                selectedFilter === option.id && styles.selectedFilterOption,
+              ]}
+              onPress={() => handleFilterSelect(option.id)}
+            >
+              <Text
+                style={[
+                  styles.filterOptionText,
+                  selectedFilter === option.id &&
+                    styles.selectedFilterOptionText,
+                ]}
+              >
+                {option.name}
+              </Text>
+              {selectedFilter === option.id && (
+                <Ionicons name="checkmark" size={16} color="#9370DB" />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Manual Location Selection Modal */}
+      {showLocationModal && (
+        <View style={styles.modalOverlay}>
+          <View style={styles.locationModal}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Location</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => {
+                  setShowLocationModal(false);
+                  setManualLocationInput("");
+                }}
+              >
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <Text style={styles.modalSubtitle}>
+              Enter a city name to search for salons
+            </Text>
+
+            <View style={styles.locationInputContainer}>
+              <Ionicons
+                name="search"
+                size={20}
+                color="#999"
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.locationInput}
+                placeholder="Enter city name (e.g., Mumbai, Delhi, Bangalore)"
+                value={manualLocationInput}
+                onChangeText={setManualLocationInput}
+                autoCapitalize="words"
+                autoCorrect={false}
+                onSubmitEditing={handleManualLocationSubmit}
+                returnKeyType="search"
+              />
+            </View>
+
+            <View style={styles.modalButtonContainer}>
+              <TouchableOpacity
+                style={styles.modalSecondaryButton}
+                onPress={() => {
+                  setShowLocationModal(false);
+                  setManualLocationInput("");
+                }}
+              >
+                <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modalPrimaryButton,
+                  !manualLocationInput.trim() && styles.modalButtonDisabled,
+                ]}
+                onPress={handleManualLocationSubmit}
+                disabled={!manualLocationInput.trim()}
+              >
+                <Text style={styles.modalPrimaryButtonText}>Search</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Option to use current location */}
+            {!isManualLocation && location && (
+              <TouchableOpacity
+                style={styles.currentLocationButton}
+                onPress={resetToCurrentLocation}
+              >
+                <Ionicons name="location" size={16} color="#9370DB" />
+                <Text style={styles.currentLocationText}>
+                  Use Current Location
+                </Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
+      )}
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TouchableOpacity
@@ -478,10 +731,11 @@ const HomeScreen = () => {
             Search salons near you...
           </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.filterButton}>
+        <TouchableOpacity style={styles.searchFilterButton}>
           <Ionicons name="options-outline" size={20} color="#000" />
         </TouchableOpacity>
       </View>
+
       {/* Main Content ScrollView */}
       <ScrollView
         showsVerticalScrollIndicator={false}
@@ -517,7 +771,13 @@ const HomeScreen = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
-              {location ? "Nearby Salons" : "Salons"}
+              {selectedCity ? `Salons in ${selectedCity}` : "Salons"}
+              {selectedFilter !== "all" && (
+                <Text style={styles.filterIndicator}>
+                  {" "}
+                  ({selectedFilterOption?.name})
+                </Text>
+              )}
             </Text>
             <TouchableOpacity>
               <Text style={styles.seeAllText}>See all</Text>
@@ -539,10 +799,33 @@ const HomeScreen = () => {
             />
           ) : (
             <View style={styles.noDataContainer}>
-              <Text style={styles.noDataText}>No salons available nearby</Text>
+              <Text style={styles.noDataText}>
+                {selectedFilter === "all"
+                  ? `No salons available${
+                      selectedCity ? ` in ${selectedCity}` : " nearby"
+                    }`
+                  : `No ${selectedFilterOption?.name} salons available${
+                      selectedCity ? ` in ${selectedCity}` : " nearby"
+                    }`}
+              </Text>
+              {!isManualLocation && (
+                <TouchableOpacity
+                  style={styles.searchCityButton}
+                  onPress={() => setShowLocationModal(true)}
+                >
+                  <Text style={styles.searchCityButtonText}>
+                    Search Different City
+                  </Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={styles.refreshButton}
-                onPress={() => fetchSalonData(location)}
+                onPress={() =>
+                  fetchSalonData(
+                    location,
+                    isManualLocation ? selectedCity : null
+                  )
+                }
               >
                 <Text style={styles.refreshButtonText}>Refresh</Text>
               </TouchableOpacity>
@@ -550,6 +833,7 @@ const HomeScreen = () => {
           )}
         </View>
       </ScrollView>
+
       {/* Bottom Tab Bar */}
       <View style={styles.bottomTabBar}>
         <TouchableOpacity style={[styles.tabItem, styles.activeTab]}>
@@ -581,6 +865,8 @@ const HomeScreen = () => {
   );
 };
 
+export default HomeScreen;
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -589,9 +875,16 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingHorizontal: 20,
     paddingTop: 10,
+  },
+  headerLeft: {
+    flex: 1,
+  },
+  headerRight: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   greetingText: {
     fontSize: 14,
@@ -601,6 +894,63 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: "bold",
     color: "#000",
+  },
+  // Filter Button Styles
+  filterButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F0F0F0",
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 20,
+    marginRight: 10,
+    borderWidth: 1,
+    borderColor: "#9370DB",
+  },
+  filterButtonText: {
+    fontSize: 12,
+    color: "#9370DB",
+    fontWeight: "500",
+    marginHorizontal: 4,
+  },
+  // Filter Dropdown Styles
+  filterDropdown: {
+    position: "absolute",
+    top: 90,
+    right: 20,
+    backgroundColor: "#fff",
+    borderRadius: 12,
+    paddingVertical: 8,
+    minWidth: 120,
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowOffset: { width: 0, height: 2 },
+    shadowRadius: 8,
+    elevation: 5,
+    zIndex: 1000,
+  },
+  filterOption: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+  },
+  selectedFilterOption: {
+    backgroundColor: "#F8F6FF",
+  },
+  filterOptionText: {
+    fontSize: 14,
+    color: "#333",
+  },
+  selectedFilterOptionText: {
+    color: "#9370DB",
+    fontWeight: "600",
+  },
+  filterIndicator: {
+    fontSize: 14,
+    color: "#9370DB",
+    fontWeight: "normal",
   },
   notificationButton: {
     width: 40,
@@ -635,6 +985,138 @@ const styles = StyleSheet.create({
     marginLeft: 4,
     fontWeight: "500",
   },
+  manualLocationButton: {
+    marginLeft: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: "#f8f8f8",
+    borderRadius: 12,
+  },
+  manualLocationText: {
+    fontSize: 12,
+    color: "#9370DB",
+    fontWeight: "500",
+  },
+  changeLocationButton: {
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 8,
+  },
+  changeLocationText: {
+    fontSize: 10,
+    color: "#9370DB",
+    fontWeight: "500",
+  },
+  // Modal Styles
+  modalOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 2000,
+  },
+  locationModal: {
+    backgroundColor: "#fff",
+    borderRadius: 20,
+    padding: 20,
+    width: "90%",
+    maxWidth: 400,
+    shadowColor: "#000",
+    shadowOpacity: 0.25,
+    shadowOffset: { width: 0, height: 4 },
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#333",
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: "#666",
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  locationInputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#F5F5F5",
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: "#E0E0E0",
+  },
+  inputIcon: {
+    marginRight: 10,
+  },
+  locationInput: {
+    flex: 1,
+    paddingVertical: 15,
+    fontSize: 16,
+    color: "#333",
+  },
+  modalButtonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  modalSecondaryButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#F5F5F5",
+    alignItems: "center",
+  },
+  modalSecondaryButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#666",
+  },
+  modalPrimaryButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: "#9370DB",
+    alignItems: "center",
+  },
+  modalButtonDisabled: {
+    backgroundColor: "#CCC",
+  },
+  modalPrimaryButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+  },
+  currentLocationButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 15,
+    paddingVertical: 8,
+  },
+  currentLocationText: {
+    fontSize: 14,
+    color: "#9370DB",
+    fontWeight: "500",
+    marginLeft: 6,
+  },
   searchContainer: {
     flexDirection: "row",
     paddingHorizontal: 20,
@@ -658,7 +1140,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#999",
   },
-  filterButton: {
+  searchFilterButton: {
     width: 40,
     height: 40,
     justifyContent: "center",
@@ -825,6 +1307,20 @@ const styles = StyleSheet.create({
     color: "#9370DB",
     fontWeight: "500",
   },
+  // Salon Type Badge Styles
+  salonTypeBadge: {
+    backgroundColor: "#9370DB",
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    alignSelf: "flex-start",
+    marginTop: 6,
+  },
+  salonTypeText: {
+    fontSize: 9,
+    color: "#fff",
+    fontWeight: "600",
+  },
   // Loading and error states
   loadingContainer: {
     flexDirection: "row",
@@ -879,6 +1375,18 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "600",
   },
+  searchCityButton: {
+    backgroundColor: "#9370DB",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  searchCityButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
   bottomTabBar: {
     flexDirection: "row",
     justifyContent: "space-around",
@@ -904,5 +1412,3 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 });
-
-export default HomeScreen;
