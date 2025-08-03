@@ -90,7 +90,7 @@ const WebMap = ({ coordinates, onMapPress, markerPosition }) => {
     }
 
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyBT1sNC4CwP--_eODhf_CwC78LJT66t6kc&libraries=places`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&libraries=places`;
     script.async = true;
     script.defer = true;
     script.onload = initializeMap;
