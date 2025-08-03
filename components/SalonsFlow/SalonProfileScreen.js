@@ -10,24 +10,14 @@ import {
   Modal,
 } from "react-native";
 
-const ProfileScreen = ({ navigation }) => {
-  const [salonData, setSalonData] = useState({
-    _id: "6813e951f28bb4730fc1f4d4",
-    shopName: "Bliss Beauty Parlour",
-    shopOwnerName: "Ritika Jain",
-    contactNumber: "9876501234",
-    email: "bliss@parlour.com",
-    address: "Park Street",
-    city: "Mumbai",
-    state: "Maharashtra",
-    pincode: "400001",
-    salonType: "women",
-    seatCount: 1,
-    openTime: "09:30",
-    closeTime: "22:30",
-    rating: 0,
-    reviews: "",
-  });
+const ProfileScreen = ({ navigation, route }) => {
+  console.log("ProfileScreen route params:", route);
+  const { userId, salonData } = route.params;
+
+  console.log("ProfileScreen userId:", userId);
+  console.log("ProfileScreen salonobj:", salonData);
+
+  const [salonObj, setsalonObj] = useState(salonData.shops);
 
   const [showSalonDetails, setShowSalonDetails] = useState(false);
   const [showOperationalSettings, setShowOperationalSettings] = useState(false);
@@ -37,29 +27,50 @@ const ProfileScreen = ({ navigation }) => {
   const [isEditingOperational, setIsEditingOperational] = useState(false);
 
   const handleBackPress = () => {
-    navigation.navigate("SalonDashboard");
+    navigation.navigate("SalonDashboard", { userId });
   };
 
   const handleSalonDetailsPress = () => {
-    setEditableData({ ...salonData });
+    setEditableData({ ...salonObj });
     setIsEditing(false);
     setShowSalonDetails(true);
   };
 
   const handleOperationalSettingsPress = () => {
     setOperationalData({
-      openTime: salonData.openTime,
-      closeTime: salonData.closeTime,
-      seatCount: salonData.seatCount,
+      openTime: salonObj.openTime,
+      closeTime: salonObj.closeTime,
+      seatCount: salonObj.seatCount,
     });
     setIsEditingOperational(false);
     setShowOperationalSettings(true);
   };
 
-  const handleSaveChanges = () => {
-    setSalonData({ ...editableData });
-    setIsEditing(false);
-    Alert.alert("Success", "Salon details updated successfully!");
+  const handleSaveChanges = async () => {
+    try {
+      // API call to update salon details
+      const response = await fetch(
+        `http://43.204.228.20:5000/api/shops/${salonObj._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(editableData),
+        }
+      );
+
+      if (response.ok) {
+        setsalonObj({ ...editableData });
+        setIsEditing(false);
+        Alert.alert("Success", "Salon details updated successfully!");
+      } else {
+        Alert.alert("Error", "Failed to update salon details");
+      }
+    } catch (error) {
+      console.error("Error updating salon details:", error);
+      Alert.alert("Error", "Network error. Please try again.");
+    }
   };
 
   const handleSaveOperationalChanges = async () => {
@@ -75,44 +86,51 @@ const ProfileScreen = ({ navigation }) => {
     }
 
     try {
-      // Here you would make API call to update operational settings
-      // const response = await fetch(`http://43.204.228.20:5000/api/shops/${salonData._id}/operational`, {
-      //   method: "PUT",
-      //   headers: {
-      //     "Content-Type": "application/json",
-      //   },
-      //   body: JSON.stringify({
-      //     openTime: operationalData.openTime,
-      //     closeTime: operationalData.closeTime,
-      //     seatCount: parseInt(operationalData.seatCount),
-      //   }),
-      // });
+      // API call to update operational settings
+      const response = await fetch(
+        `http://43.204.228.20:5000/api/shops/${salonObj._id}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            openTime: operationalData.openTime,
+            closeTime: operationalData.closeTime,
+            seatCount: parseInt(operationalData.seatCount),
+          }),
+        }
+      );
 
-      // For now, update locally
-      setSalonData((prev) => ({
-        ...prev,
-        openTime: operationalData.openTime,
-        closeTime: operationalData.closeTime,
-        seatCount: parseInt(operationalData.seatCount),
-      }));
+      if (response.ok) {
+        setsalonObj((prev) => ({
+          ...prev,
+          openTime: operationalData.openTime,
+          closeTime: operationalData.closeTime,
+          seatCount: parseInt(operationalData.seatCount),
+        }));
 
-      setIsEditingOperational(false);
-      Alert.alert("Success", "Operational settings updated successfully!");
+        setIsEditingOperational(false);
+        Alert.alert("Success", "Operational settings updated successfully!");
+      } else {
+        Alert.alert("Error", "Failed to update operational settings");
+      }
     } catch (error) {
-      Alert.alert("Error", "Failed to update operational settings");
+      console.error("Error updating operational settings:", error);
+      Alert.alert("Error", "Network error. Please try again.");
     }
   };
 
   const handleCancelEdit = () => {
-    setEditableData({ ...salonData });
+    setEditableData({ ...salonObj });
     setIsEditing(false);
   };
 
   const handleCancelOperationalEdit = () => {
     setOperationalData({
-      openTime: salonData.openTime,
-      closeTime: salonData.closeTime,
-      seatCount: salonData.seatCount,
+      openTime: salonObj.openTime,
+      closeTime: salonObj.closeTime,
+      seatCount: salonObj.seatCount,
     });
     setIsEditingOperational(false);
   };
@@ -183,7 +201,7 @@ const ProfileScreen = ({ navigation }) => {
         style: "destructive",
         onPress: () => {
           Alert.alert("Logged Out", "You have been logged out successfully");
-          // navigation.navigate('Login');
+          navigation.navigate("Login");
         },
       },
     ]);
@@ -193,21 +211,24 @@ const ProfileScreen = ({ navigation }) => {
     label,
     field,
     placeholder,
-    keyboardType = "default"
+    keyboardType = "default",
+    multiline = false
   ) => (
     <View style={styles.fieldContainer}>
       <Text style={styles.fieldLabel}>{label}</Text>
       {isEditing ? (
         <TextInput
-          style={styles.editInput}
-          value={editableData[field]}
+          style={[styles.editInput, multiline && styles.multilineInput]}
+          value={editableData[field]?.toString() || ""}
           onChangeText={(value) => updateField(field, value)}
           placeholder={placeholder}
           keyboardType={keyboardType}
+          multiline={multiline}
+          numberOfLines={multiline ? 3 : 1}
         />
       ) : (
         <Text style={styles.fieldValue}>
-          {editableData[field] || "Not specified"}
+          {editableData[field]?.toString() || "Not specified"}
         </Text>
       )}
     </View>
@@ -281,12 +302,12 @@ const ProfileScreen = ({ navigation }) => {
             {renderOperationalField(
               "Opening Time",
               "openTime",
-              "09:30 (HH:MM format)"
+              "09:00 (HH:MM format)"
             )}
             {renderOperationalField(
               "Closing Time",
               "closeTime",
-              "22:30 (HH:MM format)"
+              "22:00 (HH:MM format)"
             )}
           </View>
 
@@ -328,7 +349,7 @@ const ProfileScreen = ({ navigation }) => {
                 • Reducing seat count may impact existing appointments
               </Text>
               <Text style={styles.warningText}>
-                • Use 24-hour format for time (e.g., 09:30, 22:30)
+                • Use 24-hour format for time (e.g., 09:00, 22:00)
               </Text>
             </View>
           )}
@@ -414,7 +435,13 @@ const ProfileScreen = ({ navigation }) => {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Location</Text>
 
-            {renderEditableField("Address", "address", "Enter address")}
+            {renderEditableField(
+              "Address",
+              "address",
+              "Enter address",
+              "default",
+              true
+            )}
             {renderEditableField("City", "city", "Enter city")}
             {renderEditableField("State", "state", "Enter state")}
             {renderEditableField(
@@ -476,10 +503,16 @@ const ProfileScreen = ({ navigation }) => {
               ) : (
                 <Text style={styles.fieldValue}>
                   {editableData.salonType?.charAt(0).toUpperCase() +
-                    editableData.salonType?.slice(1)}
+                    editableData.salonType?.slice(1) || "Not specified"}
                 </Text>
               )}
             </View>
+
+            {renderEditableField(
+              "Profile Image URL",
+              "profileImageUrl",
+              "Enter profile image URL"
+            )}
           </View>
 
           {/* Additional Info */}
@@ -488,7 +521,32 @@ const ProfileScreen = ({ navigation }) => {
 
             <View style={styles.fieldContainer}>
               <Text style={styles.fieldLabel}>Rating</Text>
-              <Text style={styles.fieldValue}>{editableData.rating}/5</Text>
+              <Text style={styles.fieldValue}>
+                {editableData.rating || 0}/5 ⭐
+              </Text>
+            </View>
+
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Total Services</Text>
+              <Text style={styles.fieldValue}>
+                {editableData.services?.length || 0} services
+              </Text>
+            </View>
+
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Salon ID</Text>
+              <Text style={styles.fieldValue}>
+                {editableData._id || "Not available"}
+              </Text>
+            </View>
+
+            <View style={styles.fieldContainer}>
+              <Text style={styles.fieldLabel}>Created</Text>
+              <Text style={styles.fieldValue}>
+                {editableData.createdAt
+                  ? new Date(editableData.createdAt).toLocaleDateString()
+                  : "Not available"}
+              </Text>
             </View>
           </View>
 
@@ -532,6 +590,24 @@ const ProfileScreen = ({ navigation }) => {
     </TouchableOpacity>
   );
 
+  // Safety check for salonObj
+  if (!salonObj || !salonObj.shopName) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+            <Text style={styles.backIcon}>‹</Text>
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Profile</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}> </Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -548,11 +624,12 @@ const ProfileScreen = ({ navigation }) => {
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
             <Text style={styles.avatarText}>
-              {salonData.shopName.substring(0, 2).toUpperCase()}
+              {salonObj.shopName.substring(0, 2).toUpperCase()}
             </Text>
           </View>
-          <Text style={styles.profileName}>{salonData.shopName}</Text>
-          <Text style={styles.profilePhone}>{salonData.contactNumber}</Text>
+          <Text style={styles.profileName}>{salonObj.shopName}</Text>
+          <Text style={styles.profilePhone}>{salonObj.contactNumber}</Text>
+          <Text style={styles.profileEmail}>{salonObj.email}</Text>
         </View>
 
         {/* Profile Menu Items */}
@@ -569,14 +646,14 @@ const ProfileScreen = ({ navigation }) => {
           <ProfileItem
             icon="🏢"
             title="Salon Details"
-            subtitle="Manage salon information"
+            subtitle={`${salonObj.city}, ${salonObj.state}`}
             onPress={handleSalonDetailsPress}
           />
 
           <ProfileItem
             icon="⏰"
             title="Operational Settings"
-            subtitle={`${salonData.openTime}-${salonData.closeTime} • ${salonData.seatCount} seats`}
+            subtitle={`${salonObj.openTime}-${salonObj.closeTime} • ${salonObj.seatCount} seats`}
             onPress={handleOperationalSettingsPress}
           />
 
@@ -585,24 +662,33 @@ const ProfileScreen = ({ navigation }) => {
             title="Schedule Management"
             subtitle="Manage off days and custom timings"
             onPress={() =>
-              navigation.navigate("ScheduleManagement", { salonData })
+              navigation.navigate("ScheduleManagement", { salonObj, userId })
             }
           />
 
           <ProfileItem
             icon="✂️"
             title="Services"
-            subtitle="Manage your salon services"
-            onPress={() => navigation.navigate("ManageServices")}
+            subtitle={`${salonObj.services?.length || 0} services available`}
+            onPress={() =>
+              navigation.navigate("ManageServices", { salonObj, userId })
+            }
           />
 
           <ProfileItem
             icon="👤"
             title="Owner Details"
-            subtitle="Edit owner information"
+            subtitle={salonObj.shopOwnerName}
             onPress={() =>
               Alert.alert("Owner Details", "Navigate to owner details page")
             }
+          />
+
+          <ProfileItem
+            icon="⭐"
+            title="Reviews & Rating"
+            subtitle={`${salonObj.rating || 0}/5 rating`}
+            onPress={() => Alert.alert("Reviews", "Navigate to reviews page")}
           />
 
           <ProfileItem
@@ -711,6 +797,11 @@ const styles = StyleSheet.create({
   profilePhone: {
     fontSize: 16,
     color: "#666",
+    marginBottom: 2,
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: "#888",
   },
   menuContainer: {
     backgroundColor: "#fff",
@@ -784,6 +875,15 @@ const styles = StyleSheet.create({
   versionSubtext: {
     fontSize: 12,
     color: "#ccc",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#666",
   },
   // Modal Styles
   modalContainer: {
@@ -866,6 +966,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 2,
     borderColor: "#9370DB",
+  },
+  multilineInput: {
+    height: 80,
+    textAlignVertical: "top",
   },
   radioContainer: {
     flexDirection: "row",

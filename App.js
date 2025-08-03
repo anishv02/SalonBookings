@@ -20,6 +20,7 @@ import CustomersView from "./components/SalonsFlow/CustomerViewComponent";
 import CustomerDetailView from "./components/SalonsFlow/CustomerDetailView";
 import SeatsView from "./components/SalonsFlow/SeatsViewmanagement";
 import ManageServicesScreen from "./components/SalonsFlow/ManageServicesScreen";
+import LocationSelectionScreen from "./components/UsersFlow/LocationSelectScreen";
 import ScheduleManagementScreen from "./components/SalonsFlow/ScheduleManagement";
 
 const Stack = createNativeStackNavigator();
@@ -142,6 +143,11 @@ export default function App() {
         <Stack.Screen
           name="ScheduleManagement"
           component={ScheduleManagementScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="LocationSelection"
+          component={LocationSelectionScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

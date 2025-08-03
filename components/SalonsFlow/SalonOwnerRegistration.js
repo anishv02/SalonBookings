@@ -10,7 +10,7 @@ import {
   ActivityIndicator,
   Image,
 } from "react-native";
-import * as ImagePicker from "expo-image-picker"; // <-- Make sure this is installed
+import * as ImagePicker from "expo-image-picker";
 
 const SalonOwnerRegistrationScreen = ({ navigation }) => {
   const [shopName, setShopName] = useState("");
@@ -26,7 +26,7 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
   const [openTime, setOpenTime] = useState("");
   const [closeTime, setCloseTime] = useState("");
   const [loading, setLoading] = useState(false);
-  const [salonImage, setSalonImage] = useState(null);
+  const [selectedImage, setSelectedImage] = useState(null);
 
   // Validation function
   const validateForm = () => {
@@ -74,6 +74,10 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
       Alert.alert("Error", "Please enter closing time");
       return false;
     }
+    if (!selectedImage) {
+      Alert.alert("Error", "Please select a salon image");
+      return false;
+    }
     return true;
   };
 
@@ -90,102 +94,138 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
     return time;
   };
 
-  // Image picker handler
-  const pickImage = async () => {
-    let result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      quality: 1,
-    });
+  // Image picker handler - using the working logic from the first component
+  const handlePickImage = async () => {
+    try {
+      // Request permission
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== "granted") {
+        Alert.alert(
+          "Permission Required",
+          "Sorry, we need camera roll permissions to upload images."
+        );
+        return;
+      }
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      const selectedAsset = result.assets[0];
-      setSalonImage({
-        uri: selectedAsset.uri,
-        type: selectedAsset.type || "image/jpeg",
-        name: selectedAsset.fileName || `salon_image_${Date.now()}.jpg`,
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        quality: 1,
+        allowsMultipleSelection: false,
       });
+
+      if (!result.canceled && result.assets?.length > 0) {
+        const selectedAsset = result.assets[0];
+
+        // Extract file extension properly
+        const uriParts = selectedAsset.uri.split(".");
+        const fileType = uriParts[uriParts.length - 1];
+
+        setSelectedImage({
+          ...selectedAsset,
+          name: `photo.${fileType}`,
+          type: `image/${fileType}`,
+        });
+
+        console.log("Image selected:", {
+          uri: selectedAsset.uri,
+          name: `photo.${fileType}`,
+          type: `image/${fileType}`,
+        });
+      }
+    } catch (error) {
+      console.error("Image picker error:", error);
+      Alert.alert("Error", "Failed to pick image. Please try again.");
     }
   };
 
   const handleRegistration = async () => {
-    // Commented out validation and API for now
-    // if (!validateForm()) return;
+    if (!validateForm()) {
+      return;
+    }
 
-    // setLoading(true);
+    setLoading(true);
 
-    // const registrationData = {
-    //   shopName: shopName.trim(),
-    //   shopOwnerName: shopOwnerName.trim(),
-    //   contactNumber: contactNumber.trim(),
-    //   email: email.trim().toLowerCase(),
-    //   address: address.trim(),
-    //   city: city.trim(),
-    //   state: state.trim(),
-    //   pincode: pincode.trim(),
-    //   salonType: salonType,
-    //   seatCount: parseInt(seatCount),
-    //   openTime: formatTime(openTime.trim()),
-    //   closeTime: formatTime(closeTime.trim()),
-    //   rating: 0,
-    //   reviews: "",
-    // };
+    try {
+      const formData = new FormData();
 
-    // const formData = new FormData();
-    // Object.keys(registrationData).forEach((key) => {
-    //   formData.append(key, registrationData[key]);
-    // });
-    // if (salonImage) {
-    //   formData.append("profileImage", {
-    //     uri: salonImage.uri,
-    //     type: salonImage.type,
-    //     name: salonImage.name,
-    //   });
-    // }
+      // Add all form fields
+      formData.append("shopName", shopName.trim());
+      formData.append("shopOwnerName", shopOwnerName.trim());
+      formData.append("contactNumber", contactNumber.trim());
+      formData.append("email", email.trim().toLowerCase());
+      formData.append("address", address.trim());
+      formData.append("city", city.trim());
+      formData.append("state", state.trim());
+      formData.append("pincode", pincode.trim());
+      formData.append("salonType", salonType);
+      formData.append("seatCount", parseInt(seatCount).toString());
+      formData.append("openTime", formatTime(openTime.trim()));
+      formData.append("closeTime", formatTime(closeTime.trim()));
 
-    // try {
-    //   const response = await fetch(
-    //     "http://43.204.228.20:5000/api/shops/register",
-    //     {
-    //       method: "POST",
-    //       headers: {
-    //         "Content-Type": "multipart/form-data",
-    //       },
-    //       body: formData,
-    //     }
-    //   );
+      // Add image using the working logic
+      if (selectedImage) {
+        formData.append("profileImage", {
+          uri: selectedImage.uri,
+          name: selectedImage.name,
+          type: selectedImage.type,
+        });
 
-    //   const result = await response.json();
+        console.log("Image being sent:", {
+          uri: selectedImage.uri,
+          name: selectedImage.name,
+          type: selectedImage.type,
+        });
+      }
 
-    //   if (response.ok) {
-    //     Alert.alert("Success", "Salon registered successfully!", [
-    //       {
-    //         text: "OK",
-    //         onPress: () => {
-    //           navigation.navigate("ServiceManagement", {
-    //             salonData: result,
-    //           });
-    //         },
-    //       },
-    //     ]);
-    //   } else {
-    //     Alert.alert(
-    //       "Registration Failed",
-    //       result.message || "Something went wrong. Please try again."
-    //     );
-    //   }
-    // } catch (error) {
-    //   console.error("Registration error:", error);
-    //   Alert.alert(
-    //     "Network Error",
-    //     "Unable to connect to server. Please check your internet connection and try again."
-    //   );
-    // } finally {
-    //   setLoading(false);
-    // }
+      console.log("Sending registration request...");
 
-    // For now, just navigate to ServiceManagement without restrictions
-    navigation.navigate("ServiceManagement");
+      const response = await fetch(
+        "http://43.204.228.20:5000/api/shops/register",
+        {
+          method: "POST",
+          // headers: {
+          //   "Content-Type": "multipart/form-data",
+          // },
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+      console.log("result", result);
+
+      console.log("response", response);
+
+      // Check for success message instead of response.ok
+      if (response.ok) {
+        // Extract the shop data and ID from the response
+        const shopData = result.shops || result; // Handle both response formats
+        const shopId = shopData._id;
+
+        console.log("Shop ID:", shopId);
+        console.log("Shop Data:", shopData);
+
+        navigation.replace("ServiceManagement", {
+          salonData: shopData,
+          shopId: shopId, // Pass the shop ID separately for easy access
+        });
+      } else {
+        console.error("Registration failed:", result);
+        Alert.alert(
+          "Registration Failed",
+          result.message || "Something went wrong. Please try again."
+        );
+      }
+    } catch (error) {
+      console.error("Registration error:", error);
+      Alert.alert(
+        "Network Error",
+        "Unable to connect to server. Please check your internet connection and try again."
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -193,15 +233,15 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
       <Text style={styles.heading}>Register Your Salon</Text>
 
       {/* Image Picker Field */}
-      <TouchableOpacity style={styles.imagePicker} onPress={pickImage}>
-        {salonImage ? (
+      <TouchableOpacity style={styles.imagePicker} onPress={handlePickImage}>
+        {selectedImage ? (
           <Image
-            source={{ uri: salonImage.uri }}
+            source={{ uri: selectedImage.uri }}
             style={styles.imagePreview}
             resizeMode="cover"
           />
         ) : (
-          <Text style={styles.imagePickerText}>Select Salon Image</Text>
+          <Text style={styles.imagePickerText}>Select Salon Image *</Text>
         )}
       </TouchableOpacity>
 
@@ -302,6 +342,7 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
           <Text style={styles.timeLabel}>Opening Time *</Text>
           <TextInput
             style={[styles.input, styles.timeInput]}
+            placeholder="HH:MM (e.g., 09:00)"
             value={openTime}
             onChangeText={setOpenTime}
           />
@@ -311,6 +352,7 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
           <Text style={styles.timeLabel}>Closing Time *</Text>
           <TextInput
             style={[styles.input, styles.timeInput]}
+            placeholder="HH:MM (e.g., 20:00)"
             value={closeTime}
             onChangeText={setCloseTime}
           />
@@ -322,7 +364,7 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
       <TouchableOpacity
         style={[styles.button, loading && styles.buttonDisabled]}
         onPress={handleRegistration}
-        disabled={false} // No restrictions
+        disabled={loading}
       >
         {loading ? (
           <ActivityIndicator color="#fff" />

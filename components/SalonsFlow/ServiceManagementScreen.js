@@ -10,11 +10,17 @@ import {
   FlatList,
 } from "react-native";
 
-const AddSalonServicesScreen = ({ navigation }) => {
+const AddSalonServicesScreen = ({ navigation, route }) => {
   const [serviceName, setServiceName] = useState("");
   const [servicePrice, setServicePrice] = useState("");
   const [services, setServices] = useState([]);
   const [editingIndex, setEditingIndex] = useState(-1);
+
+  // Get the shop data and ID from route params
+  const { salonData, shopId } = route.params || {};
+
+  console.log("Shop ID:", shopId);
+  console.log("Salon Data:", salonData);
 
   const addService = () => {
     if (!serviceName.trim() || !servicePrice.trim()) {
@@ -89,7 +95,11 @@ const AddSalonServicesScreen = ({ navigation }) => {
             text: "Continue Anyway",
             onPress: () => {
               Alert.alert("Success", "Proceeding without services");
-              navigation.navigate("SalonDashboard"); // Replace with actual next screen
+              navigation.navigate("SalonDashboard", {
+                salonData,
+                shopId,
+                services: [],
+              });
             },
           },
         ]
@@ -101,11 +111,22 @@ const AddSalonServicesScreen = ({ navigation }) => {
       "Services Added",
       `Successfully added ${services.length} service(s)!`
     );
-    // navigation.navigate('NextScreen');
+
+    // Navigate to next screen with salon data, shop ID, and services
+    navigation.navigate("SalonDashboard", {
+      salonData,
+      shopId,
+      services,
+    });
   };
 
   const handleSkip = () => {
-    navigation.navigate("SalonDashboard"); // Replace with actual next screen
+    // Navigate to next screen with salon data and shop ID, but no services
+    navigation.navigate("SalonDashboard", {
+      salonData,
+      shopId,
+      services: [],
+    });
   };
 
   const renderServiceItem = ({ item, index }) => (
@@ -138,6 +159,14 @@ const AddSalonServicesScreen = ({ navigation }) => {
         <Text style={styles.subheading}>
           Add your services and pricing to help customers know what you offer
         </Text>
+
+        {/* Debug info - you can remove this later */}
+        {shopId && (
+          <View style={styles.debugInfo}>
+            <Text style={styles.debugText}>Shop ID: {shopId}</Text>
+            <Text style={styles.debugText}>Salon: {salonData?.shopName}</Text>
+          </View>
+        )}
 
         {/* Add Service Form */}
         <View style={styles.formContainer}>
@@ -243,6 +272,17 @@ const styles = StyleSheet.create({
     textAlign: "center",
     marginBottom: 24,
     lineHeight: 20,
+  },
+  debugInfo: {
+    backgroundColor: "#e3f2fd",
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 20,
+  },
+  debugText: {
+    fontSize: 12,
+    color: "#1976d2",
+    marginBottom: 2,
   },
   formContainer: {
     backgroundColor: "#f8f9fa",

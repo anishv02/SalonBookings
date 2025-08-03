@@ -16,21 +16,24 @@ const PersonalInfoScreen = ({ navigation }) => {
   const [contactNumber, setContactNumber] = useState("");
   const [password, setPassword] = useState("");
   const [isSalonOwner, setIsSalonOwner] = useState(null);
+  const [gender, setGender] = useState(""); // Add gender field
+  const [loading, setLoading] = useState(false);
 
   const handleContinue = async () => {
-    // if (
-    //   !name ||
-    //   !email ||
-    //   !contactNumber ||
-    //   !password ||
-    //   isSalonOwner === null
-    // ) {
-    //   Alert.alert("All fields are required");
-    //   return;
-    // }
+    if (
+      !name ||
+      !email ||
+      !contactNumber ||
+      !password ||
+      isSalonOwner === null ||
+      !gender
+    ) {
+      Alert.alert("All fields are required");
+      return;
+    }
 
     // Prepare userType based on radio selection
-    const userType = isSalonOwner ? "Owner" : "User";
+    const userType = isSalonOwner ? "owner" : "customer";
 
     // Prepare user data object
     const userData = {
@@ -39,16 +42,40 @@ const PersonalInfoScreen = ({ navigation }) => {
       contactNumber,
       password,
       userType,
+      gender,
     };
 
-    // Save user data locally if needed
-    await AsyncStorage.setItem("user", JSON.stringify(userData));
-
-    // Navigate based on userType
-    if (isSalonOwner) {
-      navigation.replace("SalonOwnerRegistration", { userType });
-    } else {
-      navigation.replace("Home", { userType });
+    setLoading(true);
+    try {
+      const response = await fetch(
+        "http://43.204.228.20:5000/api/users/register",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(userData),
+        }
+      );
+      const result = await response.json();
+      if (response.ok) {
+        await AsyncStorage.setItem(
+          "user",
+          JSON.stringify(result.user || userData)
+        );
+        if (isSalonOwner) {
+          navigation.replace("SalonOwnerRegistration", { userType });
+        } else {
+          navigation.replace("Home", { userType });
+        }
+      } else {
+        Alert.alert(
+          "Registration Failed",
+          result.message || "Please try again."
+        );
+      }
+    } catch (error) {
+      Alert.alert("Error", "Network error. Please try again.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -85,6 +112,50 @@ const PersonalInfoScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Gender Selection */}
+      <View style={styles.radioGroupInline}>
+        <Text style={styles.radioLabel}>Gender</Text>
+        <View style={styles.radioOptions}>
+          <TouchableOpacity
+            style={styles.radioOption}
+            onPress={() => setGender("male")}
+          >
+            <View
+              style={[
+                styles.radioCircle,
+                gender === "male" && styles.radioSelected,
+              ]}
+            />
+            <Text style={styles.radioText}>Male</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.radioOption}
+            onPress={() => setGender("female")}
+          >
+            <View
+              style={[
+                styles.radioCircle,
+                gender === "female" && styles.radioSelected,
+              ]}
+            />
+            <Text style={styles.radioText}>Female</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.radioOption}
+            onPress={() => setGender("other")}
+          >
+            <View
+              style={[
+                styles.radioCircle,
+                gender === "other" && styles.radioSelected,
+              ]}
+            />
+            <Text style={styles.radioText}>Other</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+
       <TextInput
         style={styles.input}
         placeholder="Name"
@@ -112,8 +183,14 @@ const PersonalInfoScreen = ({ navigation }) => {
         value={password}
         onChangeText={setPassword}
       />
-      <TouchableOpacity style={styles.button} onPress={handleContinue}>
-        <Text style={styles.buttonText}>Continue</Text>
+      <TouchableOpacity
+        style={styles.button}
+        onPress={handleContinue}
+        disabled={loading}
+      >
+        <Text style={styles.buttonText}>
+          {loading ? "Registering..." : "Continue"}
+        </Text>
       </TouchableOpacity>
       <TouchableOpacity
         style={{ marginTop: 20, alignSelf: "center" }}

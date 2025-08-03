@@ -9,19 +9,28 @@ import {
   Dimensions,
   Animated,
   Platform,
+  Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useNavigation } from "@react-navigation/native";
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get("window");
 
-const LandingPage = ({ onNavigate }) => {
+const LandingPage = ({ route, onNavigate }) => {
   const navigation = useNavigation();
   const [scaleAnim] = useState(new Animated.Value(0.95));
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
 
+  // Get userId from route params
+  const { userId } = route?.params || {};
+  const [salonData, setSalonData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [todayRevenue, setTodayRevenue] = useState("₹45K");
+  const [revenueChange, setRevenueChange] = useState("+12%");
+
   useEffect(() => {
+    // Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -40,7 +49,81 @@ const LandingPage = ({ onNavigate }) => {
         useNativeDriver: true,
       }),
     ]).start();
-  }, []);
+
+    // Fetch salon details if userId is available
+    if (userId) {
+      fetchSalonDetails(userId);
+    } else {
+      console.warn("No userId provided to SalonDashboard");
+      setLoading(false);
+    }
+  }, [userId]);
+
+  const fetchSalonDetails = async (id) => {
+    try {
+      setLoading(true);
+      console.log("Fetching salon details for userId:", id);
+
+      // Fetch salon/shop details
+      const response = await fetch(
+        `http://43.204.228.20:5000/api/shops/getShops?id=${id}`,
+        {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+
+      const result = await response.json();
+      console.log("Salon details response:", result);
+
+      if (response.ok) {
+        // Assuming the API returns { success: true, data: salonObject } or similar structure
+        const salonInfo = result.data || result.shop || result;
+        setSalonData(salonInfo);
+        console.log("Salon data set:", salonInfo);
+
+        // You can also fetch additional data like revenue, appointments, etc.
+        await fetchDashboardStats(id);
+      } else {
+        console.error(
+          "Failed to fetch salon details:",
+          result.message || "No salon found"
+        );
+        Alert.alert("Error", result.message || "Failed to load salon details");
+      }
+    } catch (error) {
+      console.error("Error fetching salon details:", error);
+      Alert.alert("Error", "Network error while loading salon details");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchDashboardStats = async (id) => {
+    try {
+      // You can add more API calls here to fetch:
+      // - Today's revenue
+      // - Appointments count
+      // - Available seats
+      // - etc.
+
+      // Example API call for revenue (replace with your actual endpoint)
+      // const revenueResponse = await fetch(
+      //   `http://43.204.228.20:5000/api/revenue/today?ownerId=${id}`,
+      //   {
+      //     method: "GET",
+      //     headers: { "Content-Type": "application/json" },
+      //   }
+      // );
+
+      // For now, keeping the static values
+      // You can update these based on your API response
+      setTodayRevenue("₹45K");
+      setRevenueChange("+12%");
+    } catch (error) {
+      console.error("Error fetching dashboard stats:", error);
+    }
+  };
 
   const handleTilePress = (route) => {
     Animated.sequence([
@@ -55,12 +138,39 @@ const LandingPage = ({ onNavigate }) => {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      navigation.navigate(route);
+      // Pass userId to the next screen as well
+      navigation.navigate(route, { userId });
     });
   };
 
-  const availableHeight = screenHeight - 250; // Reduce header margin
+  const handleProfilePress = () => {
+    navigation.navigate("profile", {
+      userId,
+      salonData: salonData,
+    });
+  };
+
+  const availableHeight = screenHeight - 250;
   const tileHeight = (availableHeight - 32) / 2;
+
+  // Get salon name from salonData - try different possible property names
+  const getSalonName = () => {
+    if (!salonData) return "Your Salon";
+
+    // Try different possible property names for salon name
+    return (
+      salonData.shopName ||
+      salonData.salonName ||
+      salonData.name ||
+      salonData.businessName ||
+      salonData.title ||
+      "Your Salon"
+    );
+  };
+
+  const salonName = getSalonName();
+
+  console.log("salonData:", salonData);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -87,13 +197,20 @@ const LandingPage = ({ onNavigate }) => {
         >
           <View style={styles.titleContainer}>
             <Text style={styles.welcomeText}>Welcome to</Text>
-            <Text style={styles.title}>Salon Dashboard</Text>
-            <Text style={styles.subtitle}>Manage your salon with style ✨</Text>
+            <Text style={styles.title}>
+              {loading ? "Loading..." : salonName}
+            </Text>
+            <Text style={styles.subtitle}>
+              {loading
+                ? "Fetching salon details..."
+                : "Manage your salon with style ✨"}
+            </Text>
+            {userId && <Text style={styles.userIdText}>ID: {userId}</Text>}
           </View>
 
           <TouchableOpacity
             style={styles.profileIcon}
-            onPress={() => navigation.navigate("profile")}
+            onPress={handleProfilePress}
             activeOpacity={0.7}
           >
             <View style={styles.profileIconInner}>
@@ -183,11 +300,11 @@ const LandingPage = ({ onNavigate }) => {
 
                   <View style={styles.statsContainer}>
                     <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>₹45K</Text>
+                      <Text style={styles.statNumber}>{todayRevenue}</Text>
                       <Text style={styles.statLabel}>Today's Revenue</Text>
                     </View>
                     <View style={styles.statItem}>
-                      <Text style={styles.statNumber}>+12%</Text>
+                      <Text style={styles.statNumber}>{revenueChange}</Text>
                       <Text style={styles.statLabel}>vs Yesterday</Text>
                     </View>
                   </View>
@@ -277,6 +394,13 @@ const styles = StyleSheet.create({
     color: "#6b5b73",
     textAlign: "center",
     fontStyle: "italic",
+  },
+  userIdText: {
+    fontSize: 12,
+    color: "#8b7db8",
+    textAlign: "center",
+    marginTop: 4,
+    opacity: 0.7,
   },
   profileIcon: {
     position: "absolute",

@@ -51,9 +51,18 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
-const HomeScreen = () => {
+const HomeScreen = ({ route }) => {
   const navigation = useNavigation();
-  const [userName, setUserName] = useState("John");
+
+  // Get user ID from navigation params
+  const { userId } = route?.params || {};
+
+  // User states
+  const [user, setUser] = useState(null);
+  const [userLoading, setUserLoading] = useState(false);
+  const [userError, setUserError] = useState(null);
+
+  const [userName, setUserName] = useState("");
   const [allSalons, setAllSalons] = useState([]); // Store all salons
   const [nearbySalons, setNearbySalons] = useState([]); // Store filtered salons
   const [loading, setLoading] = useState(false);
@@ -69,11 +78,65 @@ const HomeScreen = () => {
   const [locationLoading, setLocationLoading] = useState(false);
   const [locationError, setLocationError] = useState(null);
 
-  // Manual location selection states
-  const [showLocationModal, setShowLocationModal] = useState(false);
-  const [manualLocationInput, setManualLocationInput] = useState("");
-  const [selectedCity, setSelectedCity] = useState(""); // Current city being used for API
+  // Updated location selection states
+  const [selectedLocation, setSelectedLocation] = useState(null);
   const [isManualLocation, setIsManualLocation] = useState(false);
+
+  // Fetch user data from API
+  const fetchUserData = async (userIdParam) => {
+    if (!userIdParam) {
+      console.log("No user ID provided");
+      return;
+    }
+
+    setUserLoading(true);
+    setUserError(null);
+
+    try {
+      const response = await fetch(
+        `http://43.204.228.20:5000/api/users/${userIdParam}`
+      );
+
+      if (!response.ok) {
+        throw new Error(`Failed to fetch user data: ${response.status}`);
+      }
+
+      const apiResponse = await response.json();
+      console.log("API Response:", apiResponse);
+
+      // Extract user data from the nested structure
+      const userData = apiResponse.user || apiResponse;
+      console.log("User data extracted:", userData);
+
+      setUser(userData);
+
+      // Update user name if available
+      if (userData.name || userData.firstName || userData.username) {
+        setUserName(userData.name || userData.firstName || userData.username);
+      }
+    } catch (err) {
+      console.error("Error fetching user data:", err);
+      setUserError(err.message);
+
+      // Show user-friendly error message
+      Alert.alert(
+        "User Data Error",
+        "Failed to load user profile. Some features may be limited.",
+        [
+          {
+            text: "Retry",
+            onPress: () => fetchUserData(userIdParam),
+          },
+          {
+            text: "Continue",
+            style: "cancel",
+          },
+        ]
+      );
+    } finally {
+      setUserLoading(false);
+    }
+  };
 
   // Request location permission
   const requestLocationPermission = async () => {
@@ -137,9 +200,7 @@ const HomeScreen = () => {
         timestamp: currentLocation.timestamp,
       };
 
-      setLocation(locationData);
-
-      // Get address from coordinates (optional)
+      // Get address from coordinates
       try {
         const addressResponse = await Location.reverseGeocodeAsync({
           latitude: locationData.latitude,
@@ -155,12 +216,25 @@ const HomeScreen = () => {
             postalCode: address.postalCode,
             street: address.street,
           };
-          setLocation(locationData);
+
+          // Set the selected location automatically if not manually set
+          if (!isManualLocation && address.city) {
+            const autoLocation = {
+              id: "current",
+              name: `${address.city}, ${address.region}`,
+              description: `${address.street || ""} ${address.city || ""} ${
+                address.region || ""
+              } ${address.country || ""}`.trim(),
+              coordinates: locationData,
+            };
+            setSelectedLocation(autoLocation);
+          }
         }
       } catch (addressError) {
         console.log("Could not get address:", addressError);
       }
 
+      setLocation(locationData);
       return locationData;
     } catch (err) {
       console.error("Error getting location:", err);
@@ -170,15 +244,12 @@ const HomeScreen = () => {
       // Show user-friendly error message
       Alert.alert("Location Error", err.message, [
         {
-          text: "Settings",
-          onPress: () => {
-            // You can open app settings here
-            console.log("Open app settings");
-          },
-        },
-        {
           text: "Retry",
           onPress: getCurrentLocation,
+        },
+        {
+          text: "Search Location",
+          onPress: openLocationSelection,
         },
         {
           text: "Skip",
@@ -195,42 +266,25 @@ const HomeScreen = () => {
     }
   };
 
-  // Handle manual location selection
-  const handleManualLocationSubmit = () => {
-    if (manualLocationInput.trim()) {
-      setSelectedCity(manualLocationInput.trim());
-      setIsManualLocation(true);
-      setShowLocationModal(false);
-
-      // Here you would call your API with the manual city
-      // For now, we'll just fetch with the existing logic
-      fetchSalonData(location, manualLocationInput.trim());
-
-      // Clear the input for next time
-      setManualLocationInput("");
-    }
+  // Open location selection screen
+  const openLocationSelection = () => {
+    navigation.navigate("LocationSelection", {
+      onLocationSelect: handleLocationSelect,
+    });
   };
 
-  // Handle location change/reset
-  const handleLocationChange = () => {
-    setShowLocationModal(true);
+  // Handle location selection from the location screen
+  const handleLocationSelect = (locationData) => {
+    setSelectedLocation(locationData);
+    setIsManualLocation(locationData.id !== "current");
+
+    // If the selected location has coordinates, use them for distance calculation
+    const locationCoords = locationData.coordinates || null;
+
+    // Fetch salons with the new location
+    fetchSalonData(locationCoords, locationData.name);
   };
 
-  // Reset to current location
-  const resetToCurrentLocation = async () => {
-    setIsManualLocation(false);
-    setSelectedCity("");
-    setShowLocationModal(false);
-
-    if (location) {
-      // Use existing location
-      fetchSalonData(location);
-    } else {
-      // Get fresh location
-      const userLocation = await getCurrentLocation();
-      fetchSalonData(userLocation);
-    }
-  };
   const applyFilter = (salonsData, filterType) => {
     if (!filterType || filterType === "all") {
       return salonsData;
@@ -257,23 +311,30 @@ const HomeScreen = () => {
     setNearbySalons(filteredSalons);
   };
 
-  // Fetch salon data from API (updated to handle manual city selection)
-  const fetchSalonData = async (userCoords, manualCity = null) => {
+  // Fetch salon data from API (Updated version)
+  const fetchSalonData = async (userCoords = null, cityName = null) => {
     setLoading(true);
     setError(null);
 
     try {
-      // Use the provided API endpoint
-      const response = await fetch(
-        "http://43.204.228.20:5000/api/shops/getAllShops"
-        // In future, when API is updated, you can send city like:
-        // `http://43.204.228.20:5000/api/shops/getAllShops?city=${manualCity || detectedCity}`
-      );
+      // Construct API URL with city parameter if available
+      let apiUrl = "http://43.204.228.20:5000/api/shops/getShops";
+      const cityToSearch = cityName || selectedLocation?.name;
+
+      // If you want to add city parameter to API (when backend supports it)
+      if (cityToSearch) {
+        apiUrl += `?city=${encodeURIComponent(cityToSearch)}`;
+      }
+
+      const response = await fetch(apiUrl);
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log("API Response:", data);
+
       // Assuming the API returns an array of shops in data.shops or data
       let salonsData = Array.isArray(data.shops)
         ? data.shops
@@ -281,55 +342,51 @@ const HomeScreen = () => {
         ? data
         : [];
 
-      let userCity = "";
+      console.log("Raw salons data:", salonsData.length);
 
-      // Determine the city to use
-      if (manualCity) {
-        userCity = manualCity;
-        setSelectedCity(manualCity);
-      } else if (userCoords && userCoords.latitude && userCoords.longitude) {
-        try {
-          const geo = await Location.reverseGeocodeAsync({
-            latitude: userCoords.latitude,
-            longitude: userCoords.longitude,
-          });
-          if (geo && geo[0]) {
-            userCity = geo[0].city;
-            if (!isManualLocation) {
-              setSelectedCity(userCity);
-            }
+      // If we have user coordinates, calculate distances and filter
+      if (userCoords && userCoords.latitude && userCoords.longitude) {
+        salonsData = salonsData.map((salon) => {
+          if (salon.latitude && salon.longitude) {
+            const dist = getDistanceFromLatLonInKm(
+              userCoords.latitude,
+              userCoords.longitude,
+              parseFloat(salon.latitude),
+              parseFloat(salon.longitude)
+            );
+            return { ...salon, distance: parseFloat(dist.toFixed(2)) };
           }
-        } catch (e) {
-          console.log("Error getting city from geolocation", e);
-        }
+          return salon;
+        });
 
-        salonsData = salonsData
-          .map((salon) => {
-            if (salon.latitude && salon.longitude) {
-              const dist = getDistanceFromLatLonInKm(
-                userCoords.latitude,
-                userCoords.longitude,
-                salon.latitude,
-                salon.longitude
-              );
-              return { ...salon, distance: parseFloat(dist.toFixed(2)) };
-            }
-            return salon;
-          })
-          .filter((salon) => {
-            if (salon.distance && salon.distance >= 7 && salon.distance <= 10) {
-              return true;
-            }
-            if (
-              userCity &&
-              salon.city &&
-              salon.city.trim().toLowerCase() === userCity.trim().toLowerCase()
-            ) {
-              return true;
-            }
-            return true;
-          });
+        // Sort by distance if we have coordinates
+        salonsData.sort((a, b) => {
+          if (a.distance && b.distance) {
+            return a.distance - b.distance;
+          }
+          return 0;
+        });
       }
+
+      // Filter by city if specified
+      if (cityToSearch) {
+        const cityFiltered = salonsData.filter((salon) => {
+          if (salon.city) {
+            return (
+              salon.city.toLowerCase().includes(cityToSearch.toLowerCase()) ||
+              cityToSearch.toLowerCase().includes(salon.city.toLowerCase())
+            );
+          }
+          return true; // Keep salons without city info
+        });
+
+        if (cityFiltered.length > 0) {
+          salonsData = cityFiltered;
+        }
+        // If no city matches found, keep all salons (maybe the city name doesn't match exactly)
+      }
+
+      console.log("Processed salons data:", salonsData.length);
 
       // Store all salons
       setAllSalons(salonsData);
@@ -341,25 +398,30 @@ const HomeScreen = () => {
       const filteredSalons = applyFilter(salonsData, filterOption.value);
       setNearbySalons(filteredSalons);
 
-      // Check if no salons found for the current city
-      if (filteredSalons.length === 0 && !manualCity && !isManualLocation) {
-        // Show option to search in different city
-        Alert.alert(
-          "No Salons Found",
-          `No salons found in ${
-            userCity || "your area"
-          }. Would you like to search in a different city?`,
-          [
-            {
-              text: "Search Different City",
-              onPress: () => setShowLocationModal(true),
+      // Check if no salons found
+      if (filteredSalons.length === 0) {
+        const alertMessage = cityToSearch
+          ? `No salons found in ${cityToSearch}. Would you like to search in a different location?`
+          : "No salons found in your area. Would you like to search in a specific location?";
+
+        Alert.alert("No Salons Found", alertMessage, [
+          {
+            text: "Search Different Location",
+            onPress: openLocationSelection,
+          },
+          {
+            text: "Show All Salons",
+            onPress: () => {
+              setSelectedLocation(null);
+              setIsManualLocation(false);
+              fetchSalonData(userCoords, null); // Fetch without city filter
             },
-            {
-              text: "Cancel",
-              style: "cancel",
-            },
-          ]
-        );
+          },
+          {
+            text: "OK",
+            style: "cancel",
+          },
+        ]);
       }
     } catch (err) {
       console.error("Error fetching salon data:", err);
@@ -370,7 +432,7 @@ const HomeScreen = () => {
         [
           {
             text: "Retry",
-            onPress: () => fetchSalonData(userCoords, manualCity),
+            onPress: () => fetchSalonData(userCoords, cityName),
           },
           { text: "Cancel", style: "cancel" },
         ]
@@ -380,58 +442,29 @@ const HomeScreen = () => {
     }
   };
 
-  // Initialize location and data on component mount
+  // Initialize app on mount
   useEffect(() => {
     const initializeApp = async () => {
-      // First, try to get location
-      const userLocation = await getCurrentLocation();
+      try {
+        // Fetch user data if userId is provided
+        if (userId) {
+          await fetchUserData(userId);
+        }
 
-      // Then fetch salon data with or without location
-      await fetchSalonData(userLocation);
+        // First, try to get location
+        const userLocation = await getCurrentLocation();
+
+        // Then fetch salon data with or without location
+        await fetchSalonData(userLocation);
+      } catch (error) {
+        console.error("Error initializing app:", error);
+        // If location fails completely, still try to fetch salon data
+        await fetchSalonData();
+      }
     };
 
     initializeApp();
-  }, []);
-
-  // Fetch user location and salons on mount
-  useEffect(() => {
-    (async () => {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        console.log("Permission to access location was denied");
-        fetchSalonData();
-        return;
-      }
-      let location = await Location.getCurrentPositionAsync({});
-      if (location && location.coords) {
-        // Try to get full address using reverse geocoding
-        try {
-          const addressArr = await Location.reverseGeocodeAsync({
-            latitude: location.coords.latitude,
-            longitude: location.coords.longitude,
-          });
-          if (addressArr && addressArr.length > 0) {
-            const address = addressArr[0];
-            console.log(
-              `Full Address: ${address.name || ""} ${address.street || ""}, ${
-                address.city || ""
-              }, ${address.region || ""}, ${address.postalCode || ""}, ${
-                address.country || ""
-              }`
-            );
-            console.log("nearBySalons", nearbySalons);
-          } else {
-            console.log("Address not found for location:", location);
-          }
-        } catch (err) {
-          console.log("Error getting address:", err);
-        }
-      } else {
-        console.log("User location:", location);
-      }
-      fetchSalonData(location.coords);
-    })();
-  }, []);
+  }, []); // Empty dependency array - only run once
 
   // Render category item
   const renderCategoryItem = ({ item }) => (
@@ -443,7 +476,7 @@ const HomeScreen = () => {
     </TouchableOpacity>
   );
 
-  // Render nearby salon card - Updated with distance
+  // Render nearby salon card
   const renderNearbyCard = ({ item }) => (
     <TouchableOpacity
       style={styles.nearbyCard}
@@ -456,21 +489,31 @@ const HomeScreen = () => {
       }
     >
       <Image
-        source={{ uri: "https://via.placeholder.com/160x100?text=Salon" }}
+        source={{
+          uri:
+            item.images && item.images.length > 0
+              ? item.images[0]
+              : "https://via.placeholder.com/160x100?text=Salon",
+        }}
         style={styles.nearbyImage}
+        defaultSource={{
+          uri: "https://via.placeholder.com/160x100?text=Salon",
+        }}
       />
       <View style={styles.nearbyInfo}>
         <Text style={styles.nearbyName} numberOfLines={1}>
-          {item.shopName}
+          {item.shopName || "Salon Name"}
         </Text>
         <View style={styles.nearbyLocationRow}>
           <Ionicons name="location-outline" size={12} color="#666" />
           <Text style={styles.nearbyLocation} numberOfLines={1}>
-            {item.city}, {item.state}
+            {item.city && item.state
+              ? `${item.city}, ${item.state}`
+              : item.city || item.state || "Location"}
           </Text>
         </View>
         <Text style={styles.nearbyAddress} numberOfLines={1}>
-          {item.address}
+          {item.address || "Address not available"}
         </Text>
         <View style={styles.nearbyBottomRow}>
           <View style={styles.nearbyRating}>
@@ -478,7 +521,7 @@ const HomeScreen = () => {
             <Text style={styles.nearbyRatingText}>{item.rating || "4.5"}</Text>
           </View>
           <Text style={styles.nearbyDistance}>
-            {item.distance ? `${item.distance} km` : "2.5 km"}
+            {item.distance ? `${item.distance} km` : "~2.5 km"}
           </Text>
         </View>
         {/* Show salon type badge */}
@@ -495,7 +538,11 @@ const HomeScreen = () => {
   const renderSalonLoading = () => (
     <View style={styles.loadingContainer}>
       <ActivityIndicator size="small" color="#9370DB" />
-      <Text style={styles.loadingText}>Loading salons...</Text>
+      <Text style={styles.loadingText}>
+        {selectedLocation
+          ? `Loading salons in ${selectedLocation.name}...`
+          : "Loading salons..."}
+      </Text>
     </View>
   );
 
@@ -505,14 +552,19 @@ const HomeScreen = () => {
       <Text style={styles.errorText}>Failed to load salons</Text>
       <TouchableOpacity
         style={styles.retryButton}
-        onPress={() => fetchSalonData(location)}
+        onPress={() =>
+          fetchSalonData(
+            selectedLocation?.coordinates || location,
+            selectedLocation?.name
+          )
+        }
       >
         <Text style={styles.retryButtonText}>Retry</Text>
       </TouchableOpacity>
     </View>
   );
 
-  // Render location status (updated to show manual location option)
+  // Render location status
   const renderLocationStatus = () => {
     if (locationLoading) {
       return (
@@ -525,7 +577,7 @@ const HomeScreen = () => {
       );
     }
 
-    if (locationError && !isManualLocation) {
+    if (locationError && !selectedLocation) {
       return (
         <View style={styles.locationStatus}>
           <TouchableOpacity
@@ -537,36 +589,42 @@ const HomeScreen = () => {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.manualLocationButton}
-            onPress={() => setShowLocationModal(true)}
+            onPress={openLocationSelection}
           >
-            <Text style={styles.manualLocationText}>Or Search City</Text>
+            <Text style={styles.manualLocationText}>Or Search Location</Text>
           </TouchableOpacity>
         </View>
       );
     }
 
-    if (selectedCity) {
+    if (selectedLocation) {
       return (
-        <View style={styles.locationStatus}>
+        <TouchableOpacity
+          style={styles.locationStatus}
+          onPress={openLocationSelection}
+        >
           <Ionicons
             name={isManualLocation ? "search" : "location"}
             size={16}
             color="#4CAF50"
           />
-          <Text style={styles.locationStatusText}>
-            {isManualLocation ? `Searching in: ${selectedCity}` : selectedCity}
+          <Text style={styles.locationStatusText} numberOfLines={1}>
+            {selectedLocation.name}
           </Text>
-          <TouchableOpacity
-            style={styles.changeLocationButton}
-            onPress={handleLocationChange}
-          >
-            <Text style={styles.changeLocationText}>Change</Text>
-          </TouchableOpacity>
-        </View>
+          <Ionicons name="pencil" size={12} color="#9370DB" />
+        </TouchableOpacity>
       );
     }
 
-    return null;
+    return (
+      <TouchableOpacity
+        style={styles.locationStatus}
+        onPress={openLocationSelection}
+      >
+        <Ionicons name="location-outline" size={16} color="#666" />
+        <Text style={styles.locationStatusTextGray}>Select Location</Text>
+      </TouchableOpacity>
+    );
   };
 
   const selectedFilterOption = FILTER_OPTIONS.find(
@@ -578,7 +636,9 @@ const HomeScreen = () => {
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.greetingText}>Hello {userName}!</Text>
+          <Text style={styles.greetingText}>
+            Hello {userLoading ? "..." : userName}!
+          </Text>
           <Text style={styles.welcomeText}>Good Morning!</Text>
           {renderLocationStatus()}
         </View>
@@ -636,85 +696,6 @@ const HomeScreen = () => {
         </View>
       )}
 
-      {/* Manual Location Selection Modal */}
-      {showLocationModal && (
-        <View style={styles.modalOverlay}>
-          <View style={styles.locationModal}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Select Location</Text>
-              <TouchableOpacity
-                style={styles.modalCloseButton}
-                onPress={() => {
-                  setShowLocationModal(false);
-                  setManualLocationInput("");
-                }}
-              >
-                <Ionicons name="close" size={24} color="#333" />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.modalSubtitle}>
-              Enter a city name to search for salons
-            </Text>
-
-            <View style={styles.locationInputContainer}>
-              <Ionicons
-                name="search"
-                size={20}
-                color="#999"
-                style={styles.inputIcon}
-              />
-              <TextInput
-                style={styles.locationInput}
-                placeholder="Enter city name (e.g., Mumbai, Delhi, Bangalore)"
-                value={manualLocationInput}
-                onChangeText={setManualLocationInput}
-                autoCapitalize="words"
-                autoCorrect={false}
-                onSubmitEditing={handleManualLocationSubmit}
-                returnKeyType="search"
-              />
-            </View>
-
-            <View style={styles.modalButtonContainer}>
-              <TouchableOpacity
-                style={styles.modalSecondaryButton}
-                onPress={() => {
-                  setShowLocationModal(false);
-                  setManualLocationInput("");
-                }}
-              >
-                <Text style={styles.modalSecondaryButtonText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.modalPrimaryButton,
-                  !manualLocationInput.trim() && styles.modalButtonDisabled,
-                ]}
-                onPress={handleManualLocationSubmit}
-                disabled={!manualLocationInput.trim()}
-              >
-                <Text style={styles.modalPrimaryButtonText}>Search</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Option to use current location */}
-            {!isManualLocation && location && (
-              <TouchableOpacity
-                style={styles.currentLocationButton}
-                onPress={resetToCurrentLocation}
-              >
-                <Ionicons name="location" size={16} color="#9370DB" />
-                <Text style={styles.currentLocationText}>
-                  Use Current Location
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        </View>
-      )}
-
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TouchableOpacity
@@ -767,11 +748,13 @@ const HomeScreen = () => {
           </View>
         </View>
 
-        {/* Nearby Salons Section - Updated */}
+        {/* Nearby Salons Section */}
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
-              {selectedCity ? `Salons in ${selectedCity}` : "Salons"}
+              {selectedLocation
+                ? `Salons in ${selectedLocation.name}`
+                : "Salons"}
               {selectedFilter !== "all" && (
                 <Text style={styles.filterIndicator}>
                   {" "}
@@ -792,7 +775,7 @@ const HomeScreen = () => {
             <FlatList
               data={nearbySalons}
               renderItem={renderNearbyCard}
-              keyExtractor={(item) => item._id}
+              keyExtractor={(item) => item._id || item.id}
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.salonsList}
@@ -802,28 +785,32 @@ const HomeScreen = () => {
               <Text style={styles.noDataText}>
                 {selectedFilter === "all"
                   ? `No salons available${
-                      selectedCity ? ` in ${selectedCity}` : " nearby"
+                      selectedLocation
+                        ? ` in ${selectedLocation.name}`
+                        : " nearby"
                     }`
                   : `No ${selectedFilterOption?.name} salons available${
-                      selectedCity ? ` in ${selectedCity}` : " nearby"
+                      selectedLocation
+                        ? ` in ${selectedLocation.name}`
+                        : " nearby"
                     }`}
               </Text>
-              {!isManualLocation && (
-                <TouchableOpacity
-                  style={styles.searchCityButton}
-                  onPress={() => setShowLocationModal(true)}
-                >
-                  <Text style={styles.searchCityButtonText}>
-                    Search Different City
-                  </Text>
-                </TouchableOpacity>
-              )}
+              <TouchableOpacity
+                style={styles.searchCityButton}
+                onPress={openLocationSelection}
+              >
+                <Text style={styles.searchCityButtonText}>
+                  {selectedLocation
+                    ? "Search Different Location"
+                    : "Search Location"}
+                </Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 style={styles.refreshButton}
                 onPress={() =>
                   fetchSalonData(
-                    location,
-                    isManualLocation ? selectedCity : null
+                    selectedLocation?.coordinates || location,
+                    selectedLocation?.name
                   )
                 }
               >
@@ -840,14 +827,12 @@ const HomeScreen = () => {
           <Ionicons name="home" size={22} color="#9370DB" />
           <Text style={styles.activeTabText}>Home</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.tabItem}>
+        <TouchableOpacity
+          style={styles.tabItem}
+          onPress={() => navigation.navigate("Favourite")}
+        >
           <Ionicons name="heart-outline" size={22} color="#999" />
-          <Text
-            style={styles.tabText}
-            onPress={() => navigation.navigate("Favourite")}
-          >
-            Favorite
-          </Text>
+          <Text style={styles.tabText}>Favorite</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabItem}>
           <Ionicons name="chatbubble-outline" size={22} color="#999" />
@@ -855,7 +840,12 @@ const HomeScreen = () => {
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.tabItem}
-          onPress={() => navigation.navigate("Profile")}
+          onPress={() =>
+            navigation.navigate("Profile", {
+              user: user,
+              userId: userId,
+            })
+          }
         >
           <Ionicons name="person-outline" size={22} color="#999" />
           <Text style={styles.tabText}>Profile</Text>
@@ -960,15 +950,23 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F0F0F0",
   },
-  // Location status styles
+  // Updated location status styles
   locationStatus: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 4,
+    maxWidth: 200,
   },
   locationStatusText: {
     fontSize: 12,
     color: "#4CAF50",
+    marginLeft: 4,
+    marginRight: 4,
+    flex: 1,
+  },
+  locationStatusTextGray: {
+    fontSize: 12,
+    color: "#666",
     marginLeft: 4,
   },
   locationRetryButton: {
@@ -996,126 +994,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#9370DB",
     fontWeight: "500",
-  },
-  changeLocationButton: {
-    marginLeft: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    backgroundColor: "#f0f0f0",
-    borderRadius: 8,
-  },
-  changeLocationText: {
-    fontSize: 10,
-    color: "#9370DB",
-    fontWeight: "500",
-  },
-  // Modal Styles
-  modalOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 2000,
-  },
-  locationModal: {
-    backgroundColor: "#fff",
-    borderRadius: 20,
-    padding: 20,
-    width: "90%",
-    maxWidth: 400,
-    shadowColor: "#000",
-    shadowOpacity: 0.25,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  modalHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-  modalTitle: {
-    fontSize: 20,
-    fontWeight: "bold",
-    color: "#333",
-  },
-  modalCloseButton: {
-    padding: 4,
-  },
-  modalSubtitle: {
-    fontSize: 14,
-    color: "#666",
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  locationInputContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F5F5F5",
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: "#E0E0E0",
-  },
-  inputIcon: {
-    marginRight: 10,
-  },
-  locationInput: {
-    flex: 1,
-    paddingVertical: 15,
-    fontSize: 16,
-    color: "#333",
-  },
-  modalButtonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  modalSecondaryButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#F5F5F5",
-    alignItems: "center",
-  },
-  modalSecondaryButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#666",
-  },
-  modalPrimaryButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: "#9370DB",
-    alignItems: "center",
-  },
-  modalButtonDisabled: {
-    backgroundColor: "#CCC",
-  },
-  modalPrimaryButtonText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#fff",
-  },
-  currentLocationButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 15,
-    paddingVertical: 8,
-  },
-  currentLocationText: {
-    fontSize: 14,
-    color: "#9370DB",
-    fontWeight: "500",
-    marginLeft: 6,
   },
   searchContainer: {
     flexDirection: "row",
@@ -1369,6 +1247,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 10,
     borderRadius: 8,
+    marginTop: 10,
   },
   refreshButtonText: {
     color: "#9370DB",
