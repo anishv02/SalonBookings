@@ -13,21 +13,26 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useNavigation } from "@react-navigation/native";
+import { jwt_decode } from "jwt-decode";
+import { getToken } from "../../utils/authStorage"; // Import the getToken function
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get("window");
 
-const LandingPage = ({ route, onNavigate }) => {
+const LandingPage = ({ userData, onNavigate }) => {
   const navigation = useNavigation();
   const [scaleAnim] = useState(new Animated.Value(0.95));
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
 
   // Get userId from route params
-  const { userId } = route?.params || {};
-  const [salonData, setSalonData] = useState(null);
+
+  // State to hold salon data
+  const userId = userData?.userId || null;
   const [loading, setLoading] = useState(true);
   const [todayRevenue, setTodayRevenue] = useState("₹45K");
   const [revenueChange, setRevenueChange] = useState("+12%");
+
+  console.log("LandingPage userData:", userData);
 
   useEffect(() => {
     // Animation

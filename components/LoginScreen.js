@@ -8,6 +8,7 @@ import {
   Alert,
   Image,
 } from "react-native";
+import { storeToken } from "../utils/authStorage"; // at the top of LoginScreen
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -38,6 +39,7 @@ const LoginScreen = ({ navigation }) => {
         }
       );
       const result = await response.json();
+
       if (response.ok) {
         setShowOtpInput(true);
         Alert.alert("OTP Sent", "Please check your email for the OTP.");
@@ -117,6 +119,7 @@ const LoginScreen = ({ navigation }) => {
       return;
     }
     setLoading(true);
+
     try {
       const response = await fetch(
         "http://43.204.228.20:5000/api/otp/verify-otp",
@@ -126,15 +129,15 @@ const LoginScreen = ({ navigation }) => {
           body: JSON.stringify({ email, otp }),
         }
       );
+
       const result = await response.json();
-      console.log("response:", response);
-      console.log("OTP Verification Result:", result);
 
-      if (response.ok || result.userType === "New") {
-        Alert.alert("Success", "OTP verified successfully!");
+      // ✅ Extract token and user from result
+      const { token, user } = result;
 
-        // Extract user info from the actual response structure
-        const { user, token } = result;
+      if (response.ok && token && user) {
+        await storeToken(token); // ✅ store token persistently
+
         const _id = user?._id;
         const userType = user?.userType;
         const userEmail = user?.email;
@@ -148,41 +151,22 @@ const LoginScreen = ({ navigation }) => {
           userEmail
         );
 
-        // Check if user object exists - if not, treat as new user
-        if (result.userType === "New") {
-          console.log("No user data found, treating as new user");
-          navigation.replace("PersonalInfo");
-          setLoading(false);
-          return;
-        }
-
-        // Handle existing users based on their userType
+        // ✅ Navigate based on userType and existence
         if (userType === "owner") {
-          console.log("Owner detected, checking for shop...");
           const hasShop = await checkOwnerShop(_id);
-          console.log("Has shop:", hasShop);
           if (hasShop) {
-            console.log("Navigating to SalonDashboard with ID:", _id);
             navigation.replace("SalonDashboard", { userId: _id });
           } else {
-            console.log("No shop found, navigating to PersonalInfo");
             navigation.replace("PersonalInfo", { userId: _id });
           }
         } else if (userType === "customer") {
-          console.log("Customer detected, checking existence...");
           const customerExists = await checkCustomerExists(_id);
-          console.log("Customer exists:", customerExists);
           if (customerExists) {
             navigation.replace("Home", { userId: _id });
           } else {
             navigation.replace("PersonalInfo", { userId: _id });
           }
         } else {
-          console.log("Unknown userType:", userType);
-          Alert.alert(
-            "Error",
-            "Unknown user userType. Please complete your profile."
-          );
           navigation.replace("PersonalInfo", { userId: _id });
         }
       } else {

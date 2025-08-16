@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { jwtDecode } from "jwt-decode";
+import { getToken } from "./utils/authStorage"; // ✅ Import token getter
+
+// Screens
 import HomeScreen from "./components/UsersFlow/HomeScreen";
 import SearchScreen from "./components/UsersFlow/SearchScreen";
 import SalonDetailScreen from "./components/UsersFlow/SalonDetailScreen";
@@ -27,127 +30,183 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   const [initialRoute, setInitialRoute] = useState(null);
+  const [userData, setUserData] = useState(null);
 
   useEffect(() => {
-    const checkUser = async () => {
-      const user = await AsyncStorage.getItem("user");
-      if (user) {
-        setInitialRoute("Login");
-      } else {
+    const checkToken = async () => {
+      try {
+        const token = await getToken();
+
+        console.log("Token retrieved:", token);
+
+        if (token) {
+          const decoded = jwtDecode(token);
+          console.log("Decoded token:", decoded);
+
+          // Optional: Check token expiry here
+          const now = Date.now() / 1000;
+          if (decoded.exp && decoded.exp < now) {
+            console.log("Token expired");
+            setInitialRoute("Login");
+            return;
+          }
+
+          // Store user data for passing to components
+          setUserData({
+            userId: decoded.userId || decoded.id || decoded.sub, // Handle different JWT structures
+            email: decoded.email,
+            userType: decoded.userType,
+            // Add any other fields you need from the token
+          });
+
+          // Navigate based on userType
+          if (decoded.userType === "owner") {
+            setInitialRoute("SalonDashboard");
+          } else if (decoded.userType === "customer") {
+            setInitialRoute("Home");
+          } else {
+            setInitialRoute("Login");
+          }
+        } else {
+          setInitialRoute("Login");
+        }
+      } catch (err) {
+        console.error("Error decoding token:", err);
         setInitialRoute("Login");
       }
     };
-    checkUser();
+
+    checkToken();
   }, []);
 
-  if (!initialRoute) return null; // or a loading spinner
+  if (!initialRoute) return null; // Optional: show splash or loader
+
+  // Custom screen wrapper to pass userData
+  const screenWrapper = (Component, name) => {
+    return (props) => {
+      // Pass userData as props to all screens
+      return <Component {...props} userData={userData} />;
+    };
+  };
 
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName={initialRoute}>
         <Stack.Screen
           name="Login"
-          component={LoginScreen}
+          component={screenWrapper(LoginScreen, "Login")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="PersonalInfo"
-          component={PersonalInfoScreen}
+          component={screenWrapper(PersonalInfoScreen, "PersonalInfo")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Home"
-          component={HomeScreen}
+          component={screenWrapper(HomeScreen, "Home")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Search"
-          component={SearchScreen}
+          component={screenWrapper(SearchScreen, "Search")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="SalonDetail"
-          component={SalonDetailScreen}
+          component={screenWrapper(SalonDetailScreen, "SalonDetail")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Profile"
-          component={ProfileScreen}
+          component={screenWrapper(ProfileScreen, "Profile")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="Favourite"
-          component={FavouriteScreen}
+          component={screenWrapper(FavouriteScreen, "Favourite")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="SalonOwnerRegistration"
-          component={SalonOwnerRegistrationScreen}
+          component={screenWrapper(
+            SalonOwnerRegistrationScreen,
+            "SalonOwnerRegistration"
+          )}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="SalonDashboard"
-          component={DashboardScreen}
+          component={screenWrapper(DashboardScreen, "SalonDashboard")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="ServiceManagement"
-          component={ServiceManagementScreen}
+          component={screenWrapper(
+            ServiceManagementScreen,
+            "ServiceManagement"
+          )}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="WorkingHours"
-          component={WorkingHoursScreen}
+          component={screenWrapper(WorkingHoursScreen, "WorkingHours")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="SlotManagement"
-          component={SlotManagementScreen}
+          component={screenWrapper(SlotManagementScreen, "SlotManagement")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="PhoneVerification"
-          component={PhoneVerification}
+          component={screenWrapper(PhoneVerification, "PhoneVerification")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="SalonProfile"
-          component={SalonProfileScreen}
+          component={screenWrapper(SalonProfileScreen, "SalonProfile")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="CustomersView"
-          component={CustomersView}
+          component={screenWrapper(CustomersView, "CustomersView")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="customerDetails"
-          component={CustomerDetailView}
+          component={screenWrapper(CustomerDetailView, "customerDetails")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="seats"
-          component={SeatsView}
+          component={screenWrapper(SeatsView, "seats")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="profile"
-          component={SalonProfileScreen}
+          component={screenWrapper(SalonProfileScreen, "profile")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="ManageServices"
-          component={ManageServicesScreen}
+          component={screenWrapper(ManageServicesScreen, "ManageServices")}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="ScheduleManagement"
-          component={ScheduleManagementScreen}
+          component={screenWrapper(
+            ScheduleManagementScreen,
+            "ScheduleManagement"
+          )}
           options={{ headerShown: false }}
         />
         <Stack.Screen
           name="LocationSelection"
-          component={LocationSelectionScreen}
+          component={screenWrapper(
+            LocationSelectionScreen,
+            "LocationSelection"
+          )}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
