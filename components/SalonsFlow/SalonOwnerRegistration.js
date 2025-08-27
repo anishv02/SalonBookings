@@ -12,7 +12,10 @@ import {
 } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 
-const SalonOwnerRegistrationScreen = ({ navigation }) => {
+const SalonOwnerRegistrationScreen = ({ navigation, route }) => {
+  const userData = route?.params?.userData || {};
+  const userId = route?.params?.userId;
+
   const [shopName, setShopName] = useState("");
   const [shopOwnerName, setShopOwnerName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
@@ -141,13 +144,11 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
   };
 
   const handleRegistration = async () => {
-    if (!validateForm()) {
-      return;
-    }
-
+    if (!validateForm()) return;
     setLoading(true);
 
     try {
+      // 1. Register the shop
       const formData = new FormData();
 
       // Add all form fields
@@ -181,48 +182,40 @@ const SalonOwnerRegistrationScreen = ({ navigation }) => {
 
       console.log("Sending registration request...");
 
-      const response = await fetch(
-        "http://43.204.228.20:5000/api/shops/register",
+      const shopResponse = await fetch(
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/register",
         {
           method: "POST",
-          // headers: {
-          //   "Content-Type": "multipart/form-data",
-          // },
           body: formData,
         }
       );
+      const shopResult = await shopResponse.json();
 
-      const result = await response.json();
-      console.log("result", result);
-
-      console.log("response", response);
-
-      // Check for success message instead of response.ok
-      if (response.ok) {
-        // Extract the shop data and ID from the response
-        const shopData = result.shops || result; // Handle both response formats
-        const shopId = shopData._id;
-
-        console.log("Shop ID:", shopId);
-        console.log("Shop Data:", shopData);
-
-        navigation.replace("ServiceManagement", {
-          salonData: shopData,
-          shopId: shopId, // Pass the shop ID separately for easy access
-        });
-      } else {
-        console.error("Registration failed:", result);
+      if (!shopResponse.ok) {
+        // If shop registration fails, delete the user
+        if (userId) {
+          await fetch(
+            `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/users/${userId}`,
+            {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
         Alert.alert(
-          "Registration Failed",
-          result.message || "Something went wrong. Please try again."
+          "Shop Registration Failed",
+          shopResult.message ||
+            "Please try again. Your user registration has been reverted."
         );
+        setLoading(false);
+        return;
       }
+
+      // On success, navigate to LoginScreen
+      Alert.alert("Success", "Salon registered! Please login to continue.");
+      navigation.replace("Login", { email: userData.email });
     } catch (error) {
-      console.error("Registration error:", error);
-      Alert.alert(
-        "Network Error",
-        "Unable to connect to server. Please check your internet connection and try again."
-      );
+      Alert.alert("Error", "Network error. Please try again.");
     } finally {
       setLoading(false);
     }

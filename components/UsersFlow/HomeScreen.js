@@ -18,6 +18,19 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import * as Location from "expo-location";
+import {
+  scale,
+  verticalScale,
+  moderateScale,
+  responsiveFontSize,
+  wp,
+  hp,
+  spacing,
+  borderRadius,
+  deviceType,
+} from "../../responsive";
+import { jwtDecode } from "jwt-decode";
+import { getToken } from "../../utils/authStorage";
 
 // Categories data
 const CATEGORIES = [
@@ -51,11 +64,20 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
+const font = (size) => {
+  if (Platform.OS === "android") {
+    return responsiveFontSize(size * 0.92);
+  }
+  return responsiveFontSize(size);
+};
+
 const HomeScreen = ({ route }) => {
   const navigation = useNavigation();
 
   // Get user ID from navigation params
-  const { userId } = route?.params || {};
+  // const { userId } = route?.params || {};
+
+  const [userId, setUserId] = useState(null);
 
   // User states
   const [user, setUser] = useState(null);
@@ -94,7 +116,7 @@ const HomeScreen = ({ route }) => {
 
     try {
       const response = await fetch(
-        `http://43.204.228.20:5000/api/users/${userIdParam}`
+        `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/users/${userIdParam}`
       );
 
       if (!response.ok) {
@@ -311,19 +333,22 @@ const HomeScreen = ({ route }) => {
     setNearbySalons(filteredSalons);
   };
 
+  console.log("User", user);
+
   // Fetch salon data from API (Updated version)
   const fetchSalonData = async (userCoords = null, cityName = null) => {
     setLoading(true);
     setError(null);
 
     try {
-      // Construct API URL with city parameter if available
-      let apiUrl = "http://43.204.228.20:5000/api/shops/getShops";
+      // Construct API URL with id parameter if available
+      let apiUrl =
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/getShops";
       const cityToSearch = cityName || selectedLocation?.name;
 
-      // If you want to add city parameter to API (when backend supports it)
-      if (cityToSearch) {
-        apiUrl += `?city=${encodeURIComponent(cityToSearch)}`;
+      // If you want to add id parameter to API (when backend supports it)
+      if (userId) {
+        apiUrl += `?id=${userId}`;
       }
 
       const response = await fetch(apiUrl);
@@ -446,9 +471,14 @@ const HomeScreen = ({ route }) => {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Fetch user data if userId is provided
-        if (userId) {
-          await fetchUserData(userId);
+        const token = await getToken();
+        if (token) {
+          const decoded = jwtDecode(token);
+          console.log("Decoded token HOme:", decoded);
+          const extractedShopId = decoded.userId;
+          setUserId(extractedShopId);
+          console.log("Extracted Shop ID:", extractedShopId);
+          await fetchUserData(extractedShopId);
         }
 
         // First, try to get location
@@ -480,13 +510,14 @@ const HomeScreen = ({ route }) => {
   const renderNearbyCard = ({ item }) => (
     <TouchableOpacity
       style={styles.nearbyCard}
-      onPress={() =>
+      onPress={() => {
         navigation.navigate("SalonDetail", {
           salonId: item._id,
           salonName: item.shopName,
           salonData: item,
-        })
-      }
+          userId: userId,
+        });
+      }}
     >
       <Image
         source={{
@@ -734,7 +765,7 @@ const HomeScreen = ({ route }) => {
         </View>
 
         {/* Special Offers Section */}
-        <View style={styles.sectionContainer}>
+        {/* <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Special Offers</Text>
           <View style={styles.offerCard}>
             <View style={styles.offerContent}>
@@ -746,7 +777,7 @@ const HomeScreen = ({ route }) => {
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </View> */}
 
         {/* Nearby Salons Section */}
         <View style={styles.sectionContainer}>
@@ -866,139 +897,160 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    paddingHorizontal: 20,
-    paddingTop: 10,
+    paddingHorizontal: wp(5),
+    paddingTop:
+      Platform.OS === "android" ? verticalScale(15) : verticalScale(10),
+    paddingBottom: verticalScale(10),
   },
   headerLeft: {
     flex: 1,
+    maxWidth: wp(65),
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
   },
   greetingText: {
-    fontSize: 14,
+    fontSize: font(14),
     color: "#999",
+    lineHeight: font(18),
   },
   welcomeText: {
-    fontSize: 20,
+    fontSize: font(20),
     fontWeight: "bold",
     color: "#000",
+    lineHeight: font(24),
+    marginTop: verticalScale(2),
   },
+
   // Filter Button Styles
   filterButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F0F0F0",
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 20,
-    marginRight: 10,
+    paddingVertical: verticalScale(8),
+    paddingHorizontal: scale(12),
+    borderRadius: borderRadius.lg,
+    marginRight: scale(10),
     borderWidth: 1,
     borderColor: "#9370DB",
+    minHeight: verticalScale(36),
   },
   filterButtonText: {
-    fontSize: 12,
+    fontSize: font(12),
     color: "#9370DB",
     fontWeight: "500",
-    marginHorizontal: 4,
+    marginHorizontal: scale(4),
   },
+
   // Filter Dropdown Styles
   filterDropdown: {
     position: "absolute",
-    top: 90,
-    right: 20,
+    top: Platform.OS === "android" ? verticalScale(95) : verticalScale(90),
+    right: wp(5),
     backgroundColor: "#fff",
-    borderRadius: 12,
-    paddingVertical: 8,
-    minWidth: 120,
+    borderRadius: borderRadius.lg,
+    paddingVertical: verticalScale(8),
+    minWidth: scale(120),
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
-    elevation: 5,
+    elevation: 8, // Increased for Android
     zIndex: 1000,
   },
   filterOption: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+    paddingVertical: verticalScale(12),
+    paddingHorizontal: scale(16),
+    minHeight: verticalScale(44),
   },
   selectedFilterOption: {
     backgroundColor: "#F8F6FF",
   },
   filterOptionText: {
-    fontSize: 14,
+    fontSize: font(14),
     color: "#333",
+    lineHeight: font(18),
   },
   selectedFilterOptionText: {
     color: "#9370DB",
     fontWeight: "600",
   },
   filterIndicator: {
-    fontSize: 14,
+    fontSize: font(14),
     color: "#9370DB",
     fontWeight: "normal",
   },
   notificationButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F0F0F0",
   },
-  // Updated location status styles
+
+  // Location status styles
   locationStatus: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: 4,
-    maxWidth: 200,
+    marginTop: verticalScale(4),
+    maxWidth: wp(55),
+    minHeight: verticalScale(20),
   },
   locationStatusText: {
-    fontSize: 12,
+    fontSize: font(12),
     color: "#4CAF50",
-    marginLeft: 4,
-    marginRight: 4,
+    marginLeft: scale(4),
+    marginRight: scale(4),
     flex: 1,
+    lineHeight: font(16),
   },
   locationStatusTextGray: {
-    fontSize: 12,
+    fontSize: font(12),
     color: "#666",
-    marginLeft: 4,
+    marginLeft: scale(4),
+    lineHeight: font(16),
   },
   locationRetryButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
     backgroundColor: "#f0f0f0",
-    borderRadius: 12,
+    borderRadius: borderRadius.lg,
+    minHeight: verticalScale(28),
   },
   locationRetryText: {
-    fontSize: 12,
+    fontSize: font(12),
     color: "#9370DB",
-    marginLeft: 4,
+    marginLeft: scale(4),
     fontWeight: "500",
+    lineHeight: font(16),
   },
   manualLocationButton: {
-    marginLeft: 8,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    marginLeft: scale(8),
+    paddingHorizontal: scale(8),
+    paddingVertical: verticalScale(4),
     backgroundColor: "#f8f8f8",
-    borderRadius: 12,
+    borderRadius: borderRadius.lg,
+    minHeight: verticalScale(28),
   },
   manualLocationText: {
-    fontSize: 12,
+    fontSize: font(12),
     color: "#9370DB",
     fontWeight: "500",
+    lineHeight: font(16),
   },
+
+  // Search container
   searchContainer: {
     flexDirection: "row",
-    paddingHorizontal: 20,
-    marginTop: 15,
+    paddingHorizontal: wp(5),
+    marginTop: verticalScale(15),
     alignItems: "center",
   },
   searchBar: {
@@ -1006,122 +1058,148 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F0F0F0",
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    height: 40,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: scale(10),
+    height: verticalScale(40),
+    minHeight: verticalScale(40),
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: scale(8),
   },
   searchPlaceholder: {
     flex: 1,
-    fontSize: 14,
+    fontSize: font(14),
     color: "#999",
+    lineHeight: font(18),
   },
   searchFilterButton: {
-    width: 40,
-    height: 40,
+    width: scale(40),
+    height: verticalScale(40),
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F0F0F0",
-    borderRadius: 10,
-    marginLeft: 10,
+    borderRadius: borderRadius.md,
+    marginLeft: scale(10),
   },
+
+  // ScrollView
   scrollView: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: wp(5),
   },
+
+  // Categories
   categoriesContainer: {
-    marginTop: 20,
-    marginBottom: 10,
+    marginTop: verticalScale(20),
+    marginBottom: verticalScale(10),
   },
   categoryItem: {
     alignItems: "center",
-    marginRight: 20,
+    marginRight: scale(20),
   },
   categoryIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: scale(50),
+    height: scale(50),
+    borderRadius: scale(25),
     backgroundColor: "#9370DB",
     justifyContent: "center",
     alignItems: "center",
   },
   categoryName: {
-    marginTop: 5,
-    fontSize: 12,
+    marginTop: verticalScale(5),
+    fontSize: font(12),
     color: "#333",
+    textAlign: "center",
+    lineHeight: font(16),
   },
+
+  // Sections
   sectionContainer: {
-    marginTop: 25,
+    marginTop: verticalScale(25),
   },
   sectionHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: verticalScale(15),
+    minHeight: verticalScale(24),
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: font(18),
     fontWeight: "bold",
     color: "#000",
+    flex: 1,
+    lineHeight: font(22),
   },
   seeAllText: {
-    fontSize: 14,
+    fontSize: font(14),
     color: "#9370DB",
     fontWeight: "500",
+    lineHeight: font(18),
   },
+
+  // Offer card
   offerCard: {
     backgroundColor: "#9370DB",
-    borderRadius: 15,
+    borderRadius: borderRadius.lg,
     flexDirection: "row",
     overflow: "hidden",
-    height: 120,
+    height: verticalScale(120),
+    minHeight: verticalScale(100),
   },
   offerContent: {
     flex: 1,
-    padding: 15,
+    padding: spacing.md,
     justifyContent: "center",
   },
   offerTitle: {
-    fontSize: 16,
+    fontSize: font(16),
     fontWeight: "bold",
     color: "#fff",
-    marginBottom: 3,
+    marginBottom: verticalScale(3),
+    lineHeight: font(20),
   },
   offerDiscount: {
-    fontSize: 22,
+    fontSize: font(22),
     fontWeight: "bold",
     color: "#fff",
-    marginBottom: 3,
+    marginBottom: verticalScale(3),
+    lineHeight: font(26),
   },
   offerPeriod: {
-    fontSize: 12,
+    fontSize: font(12),
     color: "#fff",
     opacity: 0.8,
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
+    lineHeight: font(16),
   },
   offerButton: {
     backgroundColor: "#fff",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 20,
+    paddingVertical: verticalScale(6),
+    paddingHorizontal: scale(12),
+    borderRadius: borderRadius.lg,
     alignSelf: "flex-start",
+    minHeight: verticalScale(28),
+    justifyContent: "center",
   },
   offerButtonText: {
     color: "#9370DB",
     fontWeight: "bold",
-    fontSize: 12,
+    fontSize: font(12),
+    lineHeight: font(16),
   },
+
+  // Salon list
   salonsList: {
-    paddingRight: 20,
+    paddingRight: scale(20),
   },
-  // Updated Nearby Salon Card Styles
+
+  // Nearby Salon Card Styles
   nearbyCard: {
     backgroundColor: "#fff",
-    borderRadius: 12,
-    marginRight: 15,
-    width: 160,
+    borderRadius: borderRadius.lg,
+    marginRight: scale(15),
+    width: scale(160),
     shadowColor: "#000",
     shadowOpacity: 0.08,
     shadowOffset: { width: 0, height: 2 },
@@ -1131,163 +1209,198 @@ const styles = StyleSheet.create({
   },
   nearbyImage: {
     width: "100%",
-    height: 100,
+    height: verticalScale(100),
     backgroundColor: "#f0f0f0",
   },
   nearbyInfo: {
-    padding: 10,
+    padding: spacing.sm,
   },
   nearbyName: {
-    fontSize: 14,
+    fontSize: font(14),
     fontWeight: "600",
     color: "#333",
-    marginBottom: 4,
-    lineHeight: 18,
+    marginBottom: verticalScale(4),
+    lineHeight: font(18),
   },
   nearbyLocationRow: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: verticalScale(4),
+    minHeight: verticalScale(16),
   },
   nearbyLocation: {
-    fontSize: 11,
+    fontSize: font(11),
     color: "#666",
-    marginLeft: 3,
+    marginLeft: scale(3),
     flex: 1,
+    lineHeight: font(15),
   },
   nearbyAddress: {
-    fontSize: 10,
+    fontSize: font(10),
     color: "#999",
-    marginBottom: 8,
-    lineHeight: 14,
+    marginBottom: verticalScale(8),
+    lineHeight: font(14),
   },
   nearbyBottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    minHeight: verticalScale(20),
   },
   nearbyRating: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#f8f8f8",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: borderRadius.sm,
+    minHeight: verticalScale(20),
   },
   nearbyRatingText: {
-    fontSize: 11,
+    fontSize: font(11),
     color: "#333",
-    marginLeft: 2,
+    marginLeft: scale(2),
     fontWeight: "500",
+    lineHeight: font(15),
   },
   nearbyDistance: {
-    fontSize: 10,
+    fontSize: font(10),
     color: "#9370DB",
     fontWeight: "500",
+    lineHeight: font(14),
   },
-  // Salon Type Badge Styles
+
+  // Salon Type Badge
   salonTypeBadge: {
     backgroundColor: "#9370DB",
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 10,
+    paddingHorizontal: scale(6),
+    paddingVertical: verticalScale(2),
+    borderRadius: borderRadius.sm,
     alignSelf: "flex-start",
-    marginTop: 6,
+    marginTop: verticalScale(6),
+    minHeight: verticalScale(16),
+    justifyContent: "center",
   },
   salonTypeText: {
-    fontSize: 9,
+    fontSize: font(9),
     color: "#fff",
     fontWeight: "600",
+    lineHeight: font(12),
   },
+
   // Loading and error states
   loadingContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 30,
+    padding: spacing.lg,
+    minHeight: verticalScale(60),
   },
   loadingText: {
-    marginLeft: 10,
-    fontSize: 14,
+    marginLeft: scale(10),
+    fontSize: font(14),
     color: "#999",
+    lineHeight: font(18),
   },
   errorContainer: {
     alignItems: "center",
-    padding: 30,
+    padding: spacing.lg,
+    minHeight: verticalScale(80),
   },
   errorText: {
-    fontSize: 14,
+    fontSize: font(14),
     color: "#666",
-    marginBottom: 15,
+    marginBottom: verticalScale(15),
     textAlign: "center",
+    lineHeight: font(20),
   },
   retryButton: {
     backgroundColor: "#9370DB",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(10),
+    borderRadius: borderRadius.sm,
+    minHeight: verticalScale(40),
+    justifyContent: "center",
   },
   retryButtonText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: font(14),
     fontWeight: "600",
+    lineHeight: font(18),
   },
   noDataContainer: {
     alignItems: "center",
-    padding: 30,
+    padding: spacing.lg,
+    minHeight: verticalScale(120),
   },
   noDataText: {
-    fontSize: 14,
+    fontSize: font(14),
     color: "#666",
-    marginBottom: 15,
+    marginBottom: verticalScale(15),
     textAlign: "center",
+    lineHeight: font(20),
   },
   refreshButton: {
     backgroundColor: "#f0f0f0",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginTop: 10,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(10),
+    borderRadius: borderRadius.sm,
+    marginTop: verticalScale(10),
+    minHeight: verticalScale(40),
+    justifyContent: "center",
   },
   refreshButtonText: {
     color: "#9370DB",
-    fontSize: 14,
+    fontSize: font(14),
     fontWeight: "600",
+    lineHeight: font(18),
   },
   searchCityButton: {
     backgroundColor: "#9370DB",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-    marginBottom: 10,
+    paddingHorizontal: scale(20),
+    paddingVertical: verticalScale(10),
+    borderRadius: borderRadius.sm,
+    marginBottom: verticalScale(10),
+    minHeight: verticalScale(40),
+    justifyContent: "center",
   },
   searchCityButtonText: {
     color: "#fff",
-    fontSize: 14,
+    fontSize: font(14),
     fontWeight: "600",
+    lineHeight: font(18),
   },
+
+  // Bottom Tab Bar
   bottomTabBar: {
     flexDirection: "row",
     justifyContent: "space-around",
     borderTopWidth: 1,
     borderColor: "#eee",
     backgroundColor: "#fff",
-    paddingVertical: 10,
+    paddingVertical: verticalScale(10),
+    paddingBottom:
+      Platform.OS === "android" ? verticalScale(10) : verticalScale(15),
+    minHeight: verticalScale(60),
   },
   tabItem: {
     alignItems: "center",
+    justifyContent: "center",
+    flex: 1,
   },
   activeTab: {
     borderTopColor: "#9370DB",
   },
   tabText: {
-    fontSize: 10,
+    fontSize: font(10),
     color: "#999",
-    marginTop: 3,
+    marginTop: verticalScale(3),
+    lineHeight: font(12),
   },
   activeTabText: {
-    fontSize: 10,
+    fontSize: font(10),
     color: "#9370DB",
-    marginTop: 3,
+    marginTop: verticalScale(3),
+    lineHeight: font(12),
   },
 });

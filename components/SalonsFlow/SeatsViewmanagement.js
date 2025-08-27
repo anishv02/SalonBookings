@@ -8,11 +8,23 @@ import {
   SafeAreaView,
   Dimensions,
   Animated,
+  Platform,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useNavigation } from "@react-navigation/native";
+import {
+  scale,
+  verticalScale,
+  moderateScale,
+  responsiveFontSize,
+} from "../../responsive";
 
 const { width } = Dimensions.get("window");
+
+const font = (size) =>
+  Platform.OS === "android"
+    ? responsiveFontSize(size * 0.92)
+    : responsiveFontSize(size);
 
 const SeatsView = ({ onSeatSelect = () => {} }) => {
   const navigation = useNavigation();
@@ -164,7 +176,7 @@ const SeatsView = ({ onSeatSelect = () => {} }) => {
             onPress={() => navigation.navigate("SalonDashboard")}
             style={styles.backButton}
           >
-            <Icon name="arrow-back" size={24} color="#ffffff" />
+            <Icon name="arrow-back" size={scale(24)} color="#ffffff" />
           </TouchableOpacity>
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>Seats Management</Text>
@@ -173,7 +185,7 @@ const SeatsView = ({ onSeatSelect = () => {} }) => {
             </Text>
           </View>
           <TouchableOpacity style={styles.notificationButton}>
-            <Icon name="notifications" size={24} color="#ffffff" />
+            <Icon name="notifications" size={scale(24)} color="#ffffff" />
           </TouchableOpacity>
         </View>
 
@@ -426,143 +438,143 @@ const styles = StyleSheet.create({
     backgroundColor: "#9370DB",
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
+    paddingHorizontal: moderateScale(20),
+    paddingVertical: verticalScale(15),
+    borderBottomLeftRadius: scale(25),
+    borderBottomRightRadius: scale(25),
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: verticalScale(4) },
     shadowOpacity: 0.15,
-    shadowRadius: 8,
+    shadowRadius: scale(8),
     elevation: 8,
   },
   backButton: {
-    padding: 8,
-    borderRadius: 8,
+    padding: moderateScale(8),
+    borderRadius: scale(8),
   },
   headerText: {
     flex: 1,
-    marginLeft: 15,
+    marginLeft: moderateScale(15),
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: font(22),
     fontWeight: "700",
     color: "#ffffff",
   },
   headerSubtitle: {
-    fontSize: 14,
+    fontSize: font(14),
     color: "#e0e7ff",
-    marginTop: 2,
+    marginTop: verticalScale(2),
   },
   notificationButton: {
-    padding: 8,
-    borderRadius: 8,
+    padding: moderateScale(8),
+    borderRadius: scale(8),
   },
 
   // Stats Cards
   statsContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: moderateScale(20),
+    paddingVertical: verticalScale(20),
   },
   statCard: {
     backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 16,
+    borderRadius: scale(16),
+    padding: moderateScale(16),
     flex: 1,
-    marginHorizontal: 4,
+    marginHorizontal: scale(4),
     flexDirection: "row",
     alignItems: "center",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: verticalScale(2) },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: scale(4),
     elevation: 3,
   },
   statIconContainer: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: scale(40),
+    height: scale(40),
+    borderRadius: scale(20),
     backgroundColor: "#f8fafc",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: 12,
+    marginRight: moderateScale(12),
   },
   statTextContainer: {
     flex: 1,
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: font(20),
     fontWeight: "700",
     color: "#1f2937",
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: font(12),
     color: "#6b7280",
-    marginTop: 2,
+    marginTop: verticalScale(2),
   },
 
   // Beautiful Date Picker
   dateSection: {
-    paddingHorizontal: 20,
-    marginBottom: 20,
+    paddingHorizontal: moderateScale(20),
+    marginBottom: verticalScale(20),
   },
   datePickerBtn: {
     backgroundColor: "#ffffff",
-    borderRadius: 16,
+    borderRadius: scale(16),
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: verticalScale(2) },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: scale(4),
     elevation: 3,
   },
   datePickerContent: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
+    padding: moderateScale(16),
     justifyContent: "space-between",
   },
   datePickerText: {
-    fontSize: 16,
+    fontSize: font(16),
     color: "#1f2937",
     fontWeight: "600",
     flex: 1,
-    marginLeft: 12,
+    marginLeft: moderateScale(12),
   },
 
   // Calendar Styles
   calendarContainer: {
     backgroundColor: "#ffffff",
-    borderRadius: 16,
-    marginTop: 8,
-    padding: 16,
+    borderRadius: scale(16),
+    marginTop: verticalScale(8),
+    padding: moderateScale(16),
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: verticalScale(2) },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowRadius: scale(4),
     elevation: 3,
   },
   calendarHeader: {
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
   },
   calendarTitle: {
-    fontSize: 18,
+    fontSize: font(18),
     fontWeight: "700",
     color: "#1f2937",
   },
   calendarDaysHeader: {
     flexDirection: "row",
     justifyContent: "space-around",
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   dayHeaderText: {
-    fontSize: 14,
+    fontSize: font(14),
     fontWeight: "600",
     color: "#6b7280",
     textAlign: "center",
-    width: 40,
+    width: scale(40),
   },
   calendarGrid: {
     flexDirection: "row",
@@ -570,12 +582,12 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
   },
   calendarDate: {
-    width: 40,
-    height: 40,
+    width: scale(40),
+    height: scale(40),
     justifyContent: "center",
     alignItems: "center",
-    borderRadius: 20,
-    marginBottom: 8,
+    borderRadius: scale(20),
+    marginBottom: verticalScale(8),
   },
   selectedDate: {
     backgroundColor: "#9370DB",
@@ -586,7 +598,7 @@ const styles = StyleSheet.create({
     borderColor: "#9370DB",
   },
   calendarDateText: {
-    fontSize: 16,
+    fontSize: font(16),
     color: "#1f2937",
     fontWeight: "500",
   },
@@ -607,17 +619,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "space-between",
-    paddingHorizontal: 20,
+    paddingHorizontal: moderateScale(20),
   },
   seatTile: {
     width: "48%",
-    borderRadius: 20,
+    borderRadius: scale(20),
     borderWidth: 2,
-    marginBottom: 16,
+    marginBottom: verticalScale(16),
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: verticalScale(4) },
     shadowOpacity: 0.1,
-    shadowRadius: 8,
+    shadowRadius: scale(8),
     elevation: 5,
     overflow: "hidden",
   },
@@ -632,75 +644,75 @@ const styles = StyleSheet.create({
     borderColor: "#16a34a",
   },
   seatContent: {
-    padding: 16,
+    padding: moderateScale(16),
   },
   seatHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   seatNumber: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: scale(48),
+    height: scale(48),
+    borderRadius: scale(24),
     justifyContent: "center",
     alignItems: "center",
   },
   seatNumberText: {
-    fontSize: 16,
+    fontSize: font(16),
     fontWeight: "700",
     color: "#ffffff",
   },
   statusIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
+    width: scale(12),
+    height: scale(12),
+    borderRadius: scale(6),
   },
   customerInfo: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   customerName: {
-    fontSize: 16,
+    fontSize: font(16),
     fontWeight: "600",
     color: "#1f2937",
-    marginLeft: 6,
+    marginLeft: moderateScale(6),
   },
   timeInfo: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: verticalScale(8),
   },
   timeText: {
-    fontSize: 14,
+    fontSize: font(14),
     color: "#6b7280",
-    marginLeft: 6,
+    marginLeft: moderateScale(6),
     fontWeight: "500",
   },
   servicesContainer: {
     flexDirection: "row",
     flexWrap: "wrap",
-    marginBottom: 12,
+    marginBottom: verticalScale(12),
   },
   serviceTag: {
     backgroundColor: "#f3f4f6",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginRight: 6,
-    marginBottom: 4,
+    paddingHorizontal: moderateScale(8),
+    paddingVertical: verticalScale(4),
+    borderRadius: scale(12),
+    marginRight: moderateScale(6),
+    marginBottom: verticalScale(4),
   },
   serviceText: {
-    fontSize: 12,
+    fontSize: font(12),
     color: "#6b7280",
     fontWeight: "500",
   },
   statusContainer: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
+    paddingHorizontal: moderateScale(12),
+    paddingVertical: verticalScale(6),
+    borderRadius: scale(12),
     alignSelf: "flex-start",
   },
   occupiedStatus: {
@@ -710,7 +722,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#dcfce7",
   },
   statusText: {
-    fontSize: 12,
+    fontSize: font(12),
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
@@ -718,6 +730,6 @@ const styles = StyleSheet.create({
 
   // Scroll Content
   scrollContent: {
-    paddingBottom: 20,
+    paddingBottom: verticalScale(20),
   },
 });

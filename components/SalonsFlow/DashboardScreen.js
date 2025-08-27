@@ -13,29 +13,23 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useNavigation } from "@react-navigation/native";
-import { jwt_decode } from "jwt-decode";
-import { getToken } from "../../utils/authStorage"; // Import the getToken function
+import { jwtDecode } from "jwt-decode";
+import { getToken } from "../../utils/authStorage";
 
 const { height: screenHeight, width: screenWidth } = Dimensions.get("window");
 
-const LandingPage = ({ userData, onNavigate }) => {
+const LandingPage = () => {
   const navigation = useNavigation();
   const [scaleAnim] = useState(new Animated.Value(0.95));
   const [fadeAnim] = useState(new Animated.Value(0));
   const [slideAnim] = useState(new Animated.Value(50));
-
-  // Get userId from route params
-
-  // State to hold salon data
-  const userId = userData?.userId || null;
+  const [salonData, setSalonData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [todayRevenue, setTodayRevenue] = useState("₹45K");
   const [revenueChange, setRevenueChange] = useState("+12%");
-
-  console.log("LandingPage userData:", userData);
+  const [shopId, setShopId] = useState(null);
 
   useEffect(() => {
-    // Animation
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -55,79 +49,71 @@ const LandingPage = ({ userData, onNavigate }) => {
       }),
     ]).start();
 
-    // Fetch salon details if userId is available
-    if (userId) {
-      fetchSalonDetails(userId);
-    } else {
-      console.warn("No userId provided to SalonDashboard");
-      setLoading(false);
-    }
-  }, [userId]);
+    // Decode JWT and fetch salon details
+    const fetchShopIdAndSalon = async () => {
+      try {
+        const token = await getToken();
+        if (token) {
+          const decoded = jwtDecode(token);
+          const extractedShopId =
+            decoded.shopId ||
+            decoded.salonId ||
+            decoded.salonObj?._id ||
+            decoded.id ||
+            decoded.sub;
+          setShopId(extractedShopId);
+
+          if (extractedShopId) {
+            fetchSalonDetails(extractedShopId);
+          } else {
+            setLoading(false);
+            Alert.alert("Error", "No shopId found in token.");
+          }
+        } else {
+          setLoading(false);
+          Alert.alert("Error", "No token found. Please login again.");
+        }
+      } catch (error) {
+        setLoading(false);
+        console.error("Error decoding token:", error);
+        Alert.alert("Error", "Failed to decode token.");
+      }
+    };
+
+    fetchShopIdAndSalon();
+  }, []);
 
   const fetchSalonDetails = async (id) => {
     try {
       setLoading(true);
-      console.log("Fetching salon details for userId:", id);
-
-      // Fetch salon/shop details
       const response = await fetch(
-        `http://43.204.228.20:5000/api/shops/getShops?id=${id}`,
+        `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/getShops?id=${id}`,
         {
           method: "GET",
           headers: { "Content-Type": "application/json" },
         }
       );
-
       const result = await response.json();
-      console.log("Salon details response:", result);
-
-      if (response.ok) {
-        // Assuming the API returns { success: true, data: salonObject } or similar structure
-        const salonInfo = result.data || result.shop || result;
-        setSalonData(salonInfo);
-        console.log("Salon data set:", salonInfo);
-
-        // You can also fetch additional data like revenue, appointments, etc.
-        await fetchDashboardStats(id);
-      } else {
-        console.error(
-          "Failed to fetch salon details:",
-          result.message || "No salon found"
-        );
-        Alert.alert("Error", result.message || "Failed to load salon details");
-      }
+      const salonObj =
+        Array.isArray(result.shops) && result.shops.length > 0
+          ? result.shops[0]
+          : result.shops || result;
+      setSalonData(salonObj);
+      setLoading(false);
+      await fetchDashboardStats(id);
     } catch (error) {
+      setSalonData(null);
+      setLoading(false);
       console.error("Error fetching salon details:", error);
       Alert.alert("Error", "Network error while loading salon details");
-    } finally {
-      setLoading(false);
     }
   };
 
+  console.log("Salon Data:", salonData);
+
   const fetchDashboardStats = async (id) => {
-    try {
-      // You can add more API calls here to fetch:
-      // - Today's revenue
-      // - Appointments count
-      // - Available seats
-      // - etc.
-
-      // Example API call for revenue (replace with your actual endpoint)
-      // const revenueResponse = await fetch(
-      //   `http://43.204.228.20:5000/api/revenue/today?ownerId=${id}`,
-      //   {
-      //     method: "GET",
-      //     headers: { "Content-Type": "application/json" },
-      //   }
-      // );
-
-      // For now, keeping the static values
-      // You can update these based on your API response
-      setTodayRevenue("₹45K");
-      setRevenueChange("+12%");
-    } catch (error) {
-      console.error("Error fetching dashboard stats:", error);
-    }
+    setTodayRevenue("₹45K");
+    setRevenueChange("+12%");
   };
 
   const handleTilePress = (route) => {
@@ -143,26 +129,22 @@ const LandingPage = ({ userData, onNavigate }) => {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      // Pass userId to the next screen as well
-      navigation.navigate(route, { userId });
+      navigation.navigate(route, { shopId });
     });
   };
 
   const handleProfilePress = () => {
     navigation.navigate("profile", {
-      userId,
-      salonData: salonData,
+      shopId,
+      salonData,
     });
   };
 
   const availableHeight = screenHeight - 250;
   const tileHeight = (availableHeight - 32) / 2;
 
-  // Get salon name from salonData - try different possible property names
   const getSalonName = () => {
     if (!salonData) return "Your Salon";
-
-    // Try different possible property names for salon name
     return (
       salonData.shopName ||
       salonData.salonName ||
@@ -174,8 +156,6 @@ const LandingPage = ({ userData, onNavigate }) => {
   };
 
   const salonName = getSalonName();
-
-  console.log("salonData:", salonData);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -210,7 +190,7 @@ const LandingPage = ({ userData, onNavigate }) => {
                 ? "Fetching salon details..."
                 : "Manage your salon with style ✨"}
             </Text>
-            {userId && <Text style={styles.userIdText}>ID: {userId}</Text>}
+            {shopId && <Text style={styles.userIdText}>Shop ID: {shopId}</Text>}
           </View>
 
           <TouchableOpacity

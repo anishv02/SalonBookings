@@ -19,9 +19,6 @@ const AddSalonServicesScreen = ({ navigation, route }) => {
   // Get the shop data and ID from route params
   const { salonData, shopId } = route.params || {};
 
-  console.log("Shop ID:", shopId);
-  console.log("Salon Data:", salonData);
-
   const addService = () => {
     if (!serviceName.trim() || !servicePrice.trim()) {
       Alert.alert("Invalid Input", "Please enter both service name and price");

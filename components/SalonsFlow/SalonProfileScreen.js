@@ -5,30 +5,30 @@ import {
   TouchableOpacity,
   StyleSheet,
   ScrollView,
-  Alert,
   TextInput,
   Modal,
+  Alert,
 } from "react-native";
+import { useNavigation } from "@react-navigation/native";
+import { removeToken } from "../../utils/authStorage";
 
-const ProfileScreen = ({ navigation, route }) => {
-  console.log("ProfileScreen route params:", route);
-  const { userId, salonData } = route.params;
+const ProfileScreen = ({ route }) => {
+  const navigation = useNavigation();
+  // Get salonData and shopId from props
+  const { salonData, shopId } = route.params;
 
-  console.log("ProfileScreen userId:", userId);
-  console.log("ProfileScreen salonobj:", salonData);
-
-  const [salonObj, setsalonObj] = useState(salonData.shops);
-
+  // Use salonData for all display and editing
+  const [salonObj, setsalonObj] = useState(salonData);
   const [showSalonDetails, setShowSalonDetails] = useState(false);
   const [showOperationalSettings, setShowOperationalSettings] = useState(false);
-  const [editableData, setEditableData] = useState({});
-  const [operationalData, setOperationalData] = useState({});
+  const [editableData, setEditableData] = useState({ ...salonData });
+  const [operationalData, setOperationalData] = useState({
+    openTime: salonData.openTime,
+    closeTime: salonData.closeTime,
+    seatCount: salonData.seatCount,
+  });
   const [isEditing, setIsEditing] = useState(false);
   const [isEditingOperational, setIsEditingOperational] = useState(false);
-
-  const handleBackPress = () => {
-    navigation.navigate("SalonDashboard", { userId });
-  };
 
   const handleSalonDetailsPress = () => {
     setEditableData({ ...salonObj });
@@ -44,81 +44,6 @@ const ProfileScreen = ({ navigation, route }) => {
     });
     setIsEditingOperational(false);
     setShowOperationalSettings(true);
-  };
-
-  const handleSaveChanges = async () => {
-    try {
-      // API call to update salon details
-      const response = await fetch(
-        `http://43.204.228.20:5000/api/shops/${salonObj._id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(editableData),
-        }
-      );
-
-      if (response.ok) {
-        setsalonObj({ ...editableData });
-        setIsEditing(false);
-        Alert.alert("Success", "Salon details updated successfully!");
-      } else {
-        Alert.alert("Error", "Failed to update salon details");
-      }
-    } catch (error) {
-      console.error("Error updating salon details:", error);
-      Alert.alert("Error", "Network error. Please try again.");
-    }
-  };
-
-  const handleSaveOperationalChanges = async () => {
-    // Validation
-    if (!operationalData.openTime || !operationalData.closeTime) {
-      Alert.alert("Error", "Please enter both opening and closing times");
-      return;
-    }
-
-    if (!operationalData.seatCount || parseInt(operationalData.seatCount) < 1) {
-      Alert.alert("Error", "Seat count must be at least 1");
-      return;
-    }
-
-    try {
-      // API call to update operational settings
-      const response = await fetch(
-        `http://43.204.228.20:5000/api/shops/${salonObj._id}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            openTime: operationalData.openTime,
-            closeTime: operationalData.closeTime,
-            seatCount: parseInt(operationalData.seatCount),
-          }),
-        }
-      );
-
-      if (response.ok) {
-        setsalonObj((prev) => ({
-          ...prev,
-          openTime: operationalData.openTime,
-          closeTime: operationalData.closeTime,
-          seatCount: parseInt(operationalData.seatCount),
-        }));
-
-        setIsEditingOperational(false);
-        Alert.alert("Success", "Operational settings updated successfully!");
-      } else {
-        Alert.alert("Error", "Failed to update operational settings");
-      }
-    } catch (error) {
-      console.error("Error updating operational settings:", error);
-      Alert.alert("Error", "Network error. Please try again.");
-    }
   };
 
   const handleCancelEdit = () => {
@@ -150,61 +75,13 @@ const ProfileScreen = ({ navigation, route }) => {
   };
 
   const handleCloseModal = () => {
-    if (isEditing) {
-      Alert.alert(
-        "Unsaved Changes",
-        "You have unsaved changes. Do you want to discard them?",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Discard",
-            style: "destructive",
-            onPress: () => {
-              setIsEditing(false);
-              setShowSalonDetails(false);
-            },
-          },
-        ]
-      );
-    } else {
-      setShowSalonDetails(false);
-    }
+    setShowSalonDetails(false);
+    setIsEditing(false);
   };
 
   const handleCloseOperationalModal = () => {
-    if (isEditingOperational) {
-      Alert.alert(
-        "Unsaved Changes",
-        "You have unsaved changes. Do you want to discard them?",
-        [
-          { text: "Cancel", style: "cancel" },
-          {
-            text: "Discard",
-            style: "destructive",
-            onPress: () => {
-              setIsEditingOperational(false);
-              setShowOperationalSettings(false);
-            },
-          },
-        ]
-      );
-    } else {
-      setShowOperationalSettings(false);
-    }
-  };
-
-  const handleLogout = () => {
-    Alert.alert("Log Out", "Are you sure you want to log out?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Log Out",
-        style: "destructive",
-        onPress: () => {
-          Alert.alert("Logged Out", "You have been logged out successfully");
-          navigation.navigate("Login");
-        },
-      },
-    ]);
+    setShowOperationalSettings(false);
+    setIsEditingOperational(false);
   };
 
   const renderEditableField = (
@@ -265,7 +142,6 @@ const ProfileScreen = ({ navigation, route }) => {
       presentationStyle="pageSheet"
     >
       <View style={styles.modalContainer}>
-        {/* Header */}
         <View style={styles.modalHeader}>
           <TouchableOpacity
             style={styles.backButton}
@@ -276,29 +152,23 @@ const ProfileScreen = ({ navigation, route }) => {
           <Text style={styles.modalTitle}>Operational Settings</Text>
           <TouchableOpacity
             style={styles.editButton}
-            onPress={() =>
-              isEditingOperational
-                ? handleSaveOperationalChanges()
-                : setIsEditingOperational(true)
-            }
+            onPress={() => {
+              if (isEditingOperational) {
+                handleSaveOperationalSettings();
+              } else {
+                setIsEditingOperational(true);
+              }
+            }}
           >
             <Text style={styles.editButtonText}>
               {isEditingOperational ? "Save" : "Edit"}
             </Text>
           </TouchableOpacity>
         </View>
-
-        <ScrollView
-          style={styles.modalContent}
-          showsVerticalScrollIndicator={true}
-        >
-          {/* Operating Hours */}
+        <ScrollView style={styles.modalContent}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Operating Hours</Text>
-            <Text style={styles.sectionDescription}>
-              Set your salon's daily operating hours
-            </Text>
-
+            <Text style={styles.sectionDescription}></Text>
             {renderOperationalField(
               "Opening Time",
               "openTime",
@@ -310,66 +180,18 @@ const ProfileScreen = ({ navigation, route }) => {
               "22:00 (HH:MM format)"
             )}
           </View>
-
-          {/* Capacity Management */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Capacity Management</Text>
             <Text style={styles.sectionDescription}>
               Manage the number of available seats in your salon
             </Text>
-
             {renderOperationalField(
               "Number of Seats",
               "seatCount",
               "Enter number of seats",
               "numeric"
             )}
-
-            {!isEditingOperational && (
-              <View style={styles.infoContainer}>
-                <Text style={styles.infoTitle}>Current Status:</Text>
-                <Text style={styles.infoText}>
-                  • Operating: {operationalData.openTime} -{" "}
-                  {operationalData.closeTime}
-                </Text>
-                <Text style={styles.infoText}>
-                  • Available Seats: {operationalData.seatCount}
-                </Text>
-              </View>
-            )}
           </View>
-
-          {isEditingOperational && (
-            <View style={styles.section}>
-              <Text style={styles.warningTitle}>⚠️ Important Notes</Text>
-              <Text style={styles.warningText}>
-                • Changing operating hours will affect future bookings
-              </Text>
-              <Text style={styles.warningText}>
-                • Reducing seat count may impact existing appointments
-              </Text>
-              <Text style={styles.warningText}>
-                • Use 24-hour format for time (e.g., 09:00, 22:00)
-              </Text>
-            </View>
-          )}
-
-          {isEditingOperational && (
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={handleCancelOperationalEdit}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSaveOperationalChanges}
-              >
-                <Text style={styles.saveButtonText}>Save Changes</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </ScrollView>
       </View>
     </Modal>
@@ -382,7 +204,6 @@ const ProfileScreen = ({ navigation, route }) => {
       presentationStyle="pageSheet"
     >
       <View style={styles.modalContainer}>
-        {/* Header */}
         <View style={styles.modalHeader}>
           <TouchableOpacity
             style={styles.backButton}
@@ -393,24 +214,22 @@ const ProfileScreen = ({ navigation, route }) => {
           <Text style={styles.modalTitle}>Salon Details</Text>
           <TouchableOpacity
             style={styles.editButton}
-            onPress={() =>
-              isEditing ? handleSaveChanges() : setIsEditing(true)
-            }
+            onPress={() => {
+              if (isEditing) {
+                handleSaveSalonDetails();
+              } else {
+                setIsEditing(true);
+              }
+            }}
           >
             <Text style={styles.editButtonText}>
               {isEditing ? "Save" : "Edit"}
             </Text>
           </TouchableOpacity>
         </View>
-
-        <ScrollView
-          style={styles.modalContent}
-          showsVerticalScrollIndicator={true}
-        >
-          {/* Basic Information */}
+        <ScrollView style={styles.modalContent}>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Basic Information</Text>
-
             {renderEditableField("Shop Name", "shopName", "Enter shop name")}
             {renderEditableField(
               "Owner Name",
@@ -430,11 +249,8 @@ const ProfileScreen = ({ navigation, route }) => {
               "email-address"
             )}
           </View>
-
-          {/* Location */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Location</Text>
-
             {renderEditableField(
               "Address",
               "address",
@@ -451,95 +267,41 @@ const ProfileScreen = ({ navigation, route }) => {
               "numeric"
             )}
           </View>
-
-          {/* Salon Configuration */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Salon Configuration</Text>
-
             <View style={styles.fieldContainer}>
               <Text style={styles.fieldLabel}>Salon Type</Text>
-              {isEditing ? (
-                <View style={styles.radioContainer}>
-                  <TouchableOpacity
-                    style={styles.radioOption}
-                    onPress={() => updateField("salonType", "men")}
-                  >
-                    <View
-                      style={[
-                        styles.radioCircle,
-                        editableData.salonType === "men" &&
-                          styles.radioSelected,
-                      ]}
-                    />
-                    <Text style={styles.radioText}>Men</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.radioOption}
-                    onPress={() => updateField("salonType", "women")}
-                  >
-                    <View
-                      style={[
-                        styles.radioCircle,
-                        editableData.salonType === "women" &&
-                          styles.radioSelected,
-                      ]}
-                    />
-                    <Text style={styles.radioText}>Women</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.radioOption}
-                    onPress={() => updateField("salonType", "unisex")}
-                  >
-                    <View
-                      style={[
-                        styles.radioCircle,
-                        editableData.salonType === "unisex" &&
-                          styles.radioSelected,
-                      ]}
-                    />
-                    <Text style={styles.radioText}>Unisex</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <Text style={styles.fieldValue}>
-                  {editableData.salonType?.charAt(0).toUpperCase() +
-                    editableData.salonType?.slice(1) || "Not specified"}
-                </Text>
-              )}
+              <Text style={styles.fieldValue}>
+                {editableData.salonType?.charAt(0).toUpperCase() +
+                  editableData.salonType?.slice(1) || "Not specified"}
+              </Text>
             </View>
-
             {renderEditableField(
               "Profile Image URL",
               "profileImageUrl",
               "Enter profile image URL"
             )}
           </View>
-
-          {/* Additional Info */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Additional Information</Text>
-
             <View style={styles.fieldContainer}>
               <Text style={styles.fieldLabel}>Rating</Text>
               <Text style={styles.fieldValue}>
                 {editableData.rating || 0}/5 ⭐
               </Text>
             </View>
-
             <View style={styles.fieldContainer}>
               <Text style={styles.fieldLabel}>Total Services</Text>
               <Text style={styles.fieldValue}>
                 {editableData.services?.length || 0} services
               </Text>
             </View>
-
             <View style={styles.fieldContainer}>
               <Text style={styles.fieldLabel}>Salon ID</Text>
               <Text style={styles.fieldValue}>
-                {editableData._id || "Not available"}
+                {editableData._id || shopId || "Not available"}
               </Text>
             </View>
-
             <View style={styles.fieldContainer}>
               <Text style={styles.fieldLabel}>Created</Text>
               <Text style={styles.fieldValue}>
@@ -549,23 +311,6 @@ const ProfileScreen = ({ navigation, route }) => {
               </Text>
             </View>
           </View>
-
-          {isEditing && (
-            <View style={styles.buttonContainer}>
-              <TouchableOpacity
-                style={styles.cancelButton}
-                onPress={handleCancelEdit}
-              >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.saveButton}
-                onPress={handleSaveChanges}
-              >
-                <Text style={styles.saveButtonText}>Save Changes</Text>
-              </TouchableOpacity>
-            </View>
-          )}
         </ScrollView>
       </View>
     </Modal>
@@ -590,31 +335,92 @@ const ProfileScreen = ({ navigation, route }) => {
     </TouchableOpacity>
   );
 
-  // Safety check for salonObj
-  if (!salonObj || !salonObj.shopName) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
-            <Text style={styles.backIcon}>‹</Text>
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Profile</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.errorContainer}>
-          <Text style={styles.errorText}> </Text>
-        </View>
-      </View>
-    );
-  }
+  const handleSaveSalonDetails = async () => {
+    try {
+      // Use shopId from props for the API endpoint
+      const response = await fetch(
+        `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/${shopId}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(editableData),
+        }
+      );
+      const result = await response.json();
+
+      if (response.ok) {
+        setsalonObj({ ...editableData });
+        setIsEditing(false);
+        setShowSalonDetails(false);
+        Alert.alert("Success", "Salon details updated successfully!");
+      } else {
+        Alert.alert(
+          "Error",
+          result.message || "Failed to update salon details"
+        );
+      }
+    } catch (error) {
+      Alert.alert("Error", "Network error. Please try again.");
+    }
+  };
+
+  const handleSaveOperationalSettings = async () => {
+    try {
+      // Prepare the payload as required by the API
+      const payload = {
+        shopId: shopId,
+        openTime: operationalData.openTime,
+        closeTime: operationalData.closeTime,
+        seatCount: Number(operationalData.seatCount),
+      };
+
+      const response = await fetch(
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/update-settings",
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+      const result = await response.json();
+
+      if (response.ok) {
+        setsalonObj((prev) => ({
+          ...prev,
+          openTime: operationalData.openTime,
+          closeTime: operationalData.closeTime,
+          seatCount: operationalData.seatCount,
+        }));
+        setIsEditingOperational(false);
+        setShowOperationalSettings(false);
+        Alert.alert("Success", "Operational settings updated successfully!");
+      } else {
+        Alert.alert(
+          "Error",
+          result.message || "Failed to update operational settings"
+        );
+      }
+    } catch (error) {
+      Alert.alert("Error", "Network error. Please try again.");
+    }
+  };
+
+  const handleLogout = async () => {
+    await removeToken();
+    navigation.reset({
+      index: 0,
+      routes: [{ name: "Login" }],
+    });
+  };
 
   return (
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
-          <Text style={styles.backIcon}>‹</Text>
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
         <View style={styles.placeholder} />
       </View>
@@ -624,7 +430,7 @@ const ProfileScreen = ({ navigation, route }) => {
         <View style={styles.profileHeader}>
           <View style={styles.avatarContainer}>
             <Text style={styles.avatarText}>
-              {salonObj.shopName.substring(0, 2).toUpperCase()}
+              {salonObj.shopName?.substring(0, 2).toUpperCase()}
             </Text>
           </View>
           <Text style={styles.profileName}>{salonObj.shopName}</Text>
@@ -662,7 +468,10 @@ const ProfileScreen = ({ navigation, route }) => {
             title="Schedule Management"
             subtitle="Manage off days and custom timings"
             onPress={() =>
-              navigation.navigate("ScheduleManagement", { salonObj, userId })
+              navigation.navigate("ScheduleManagement", {
+                salonObj,
+                shopId,
+              })
             }
           />
 
@@ -671,7 +480,7 @@ const ProfileScreen = ({ navigation, route }) => {
             title="Services"
             subtitle={`${salonObj.services?.length || 0} services available`}
             onPress={() =>
-              navigation.navigate("ManageServices", { salonObj, userId })
+              navigation.navigate("ManageServices", { salonObj, shopId })
             }
           />
 
@@ -680,7 +489,7 @@ const ProfileScreen = ({ navigation, route }) => {
             title="Owner Details"
             subtitle={salonObj.shopOwnerName}
             onPress={() =>
-              Alert.alert("Owner Details", "Navigate to owner details page")
+              Alert.alert("Owner Details", "Navigate to owner details")
             }
           />
 
@@ -688,23 +497,21 @@ const ProfileScreen = ({ navigation, route }) => {
             icon="⭐"
             title="Reviews & Rating"
             subtitle={`${salonObj.rating || 0}/5 rating`}
-            onPress={() => Alert.alert("Reviews", "Navigate to reviews page")}
+            onPress={() => Alert.alert("Reviews", "Navigate to reviews")}
           />
 
           <ProfileItem
             icon="⚙️"
             title="Settings"
             subtitle="App preferences"
-            onPress={() => Alert.alert("Settings", "Navigate to settings page")}
+            onPress={() => Alert.alert("Settings", "Navigate to settings")}
           />
 
           <ProfileItem
             icon="📞"
             title="Contact Us"
             subtitle="Get in touch with support"
-            onPress={() =>
-              Alert.alert("Contact Us", "Navigate to contact page")
-            }
+            onPress={() => Alert.alert("Contact Us", "Navigate to contact")}
           />
         </View>
 

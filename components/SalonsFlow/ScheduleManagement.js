@@ -11,7 +11,10 @@ import {
 } from "react-native";
 
 const ScheduleManagementScreen = ({ navigation, route }) => {
-  const { salonData } = route.params;
+  console.log("Route params:", route.params);
+  const { salonObj, shopId } = route.params;
+  console.log("Salon Data in ScheduleManagement:", salonObj);
+  console.log("Shop ID in ScheduleManagement:", shopId);
 
   const [schedules, setSchedules] = useState([
     // Sample data - in real app this would come from API
@@ -201,7 +204,7 @@ const ScheduleManagementScreen = ({ navigation, route }) => {
         visible={showAddSchedule}
         onClose={() => setShowAddSchedule(false)}
         editingSchedule={editingSchedule}
-        salonData={salonData}
+        salonObj={salonObj}
         onSave={(scheduleData) => {
           if (editingSchedule) {
             // Update existing schedule
@@ -230,15 +233,15 @@ const AddEditScheduleModal = ({
   visible,
   onClose,
   editingSchedule,
-  salonData,
+  salonObj,
   onSave,
 }) => {
   const [formData, setFormData] = useState({
     date: "",
     isShopOpen: true,
-    openTime: salonData?.openTime || "09:30",
-    closeTime: salonData?.closeTime || "22:30",
-    seatCount: salonData?.seatCount?.toString() || "1",
+    openTime: salonObj?.openTime || "09:30",
+    closeTime: salonObj?.closeTime || "22:30",
+    seatCount: salonObj?.seatCount?.toString() || "1",
     hasPartialClosure: false,
     partialClosureFrom: "",
     partialClosureTo: "",
@@ -267,9 +270,9 @@ const AddEditScheduleModal = ({
       setFormData({
         date: "",
         isShopOpen: true,
-        openTime: salonData?.openTime || "09:30",
-        closeTime: salonData?.closeTime || "22:30",
-        seatCount: salonData?.seatCount?.toString() || "1",
+        openTime: salonObj?.openTime || "09:30",
+        closeTime: salonObj?.closeTime || "22:30",
+        seatCount: salonObj?.seatCount?.toString() || "1",
         hasPartialClosure: false,
         partialClosureFrom: "",
         partialClosureTo: "",
@@ -278,7 +281,7 @@ const AddEditScheduleModal = ({
     }
     setIsDateRange(false);
     setEndDate("");
-  }, [editingSchedule, visible, salonData]);
+  }, [editingSchedule, visible, salonObj]);
 
   const updateField = (field, value) => {
     setFormData((prev) => ({
@@ -316,9 +319,8 @@ const AddEditScheduleModal = ({
 
     // Prepare payload for API
     const payload = {
-      shopId: salonData._id,
+      shopId: salonObj._id,
       date: formData.date,
-      ...(isDateRange && endDate ? { endDate } : {}),
       isShopOpen: formData.isShopOpen,
       openTime: formData.isShopOpen ? formData.openTime : "",
       closeTime: formData.isShopOpen ? formData.closeTime : "",
@@ -335,7 +337,7 @@ const AddEditScheduleModal = ({
 
     try {
       const response = await fetch(
-        "http://43.204.228.20:5000/api/availability/override",
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/availability/override",
         {
           method: "POST",
           headers: {

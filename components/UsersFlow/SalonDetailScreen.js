@@ -19,20 +19,41 @@ import { Ionicons, FontAwesome5, MaterialIcons } from "@expo/vector-icons";
 const SalonDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute();
-  // Get the full salon object from params
-  const { salonData } = route.params || {};
 
-  // Fallback if no data is passed
-  const salon = salonData || {};
-  const services = Array.isArray(salon.services)
-    ? salon.services.map((s, idx) => ({
-        id: s._id || idx.toString(),
-        name: s.name,
-        description: s.isCustom ? "Custom Service" : "",
-        price: s.price || 0,
-        duration: s.duration,
-      }))
-    : [];
+  // Get the full salon object from params
+  const { salonData, userId } = route.params || {};
+  console.log("route params", route.params);
+  const shopId = salonData?._id;
+
+  const [services, setServices] = useState([]);
+  const [servicesLoading, setServicesLoading] = useState(true);
+
+  // Fetch services for this salon using shopId
+  useEffect(() => {
+    const fetchSalonServices = async () => {
+      if (!shopId) return;
+      setServicesLoading(true);
+      try {
+        const response = await fetch(
+          `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/services/shop/${shopId}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+        const data = await response.json();
+        const salonServices = Array.isArray(data.services) ? data.services : [];
+        setServices(salonServices);
+      } catch (error) {
+        setServices([]);
+      } finally {
+        setServicesLoading(false);
+      }
+    };
+    fetchSalonServices();
+  }, [shopId]);
 
   const [activeTab, setActiveTab] = useState("Services");
   const [cart, setCart] = useState([]);
@@ -121,16 +142,14 @@ const SalonDetailScreen = () => {
     }
   };
 
-  // Handle booking confirmation
+  // Update confirmBooking to use the new POST API
   const confirmBooking = async () => {
     try {
       // Get user from AsyncStorage
-      const userData = await import(
-        "@react-native-async-storage/async-storage"
-      ).then(({ default: AsyncStorage }) => AsyncStorage.getItem("user"));
-      const userObj = userData ? JSON.parse(userData) : null;
 
-      if (!userObj || !userObj._id) {
+      const userData = userId;
+
+      if (!userData) {
         alert("User not found. Please login again.");
         return;
       }
@@ -151,8 +170,8 @@ const SalonDetailScreen = () => {
       }
 
       const bookingData = {
-        user: userObj._id,
-        shop: salon._id,
+        user: userData,
+        shop: salonData._id,
         services: cart.map((s) => ({
           name: s.name,
           price: s.price,
@@ -163,7 +182,7 @@ const SalonDetailScreen = () => {
       };
 
       const res = await fetch(
-        "http://13.233.157.248:5000/api/bookings/book-slot",
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/bookings/book-slot",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -190,19 +209,17 @@ const SalonDetailScreen = () => {
   // Fetch available slots when cart, selectedDate, or checkoutModalVisible changes
   useEffect(() => {
     const fetchSlots = async () => {
-      if (!salon._id || !totalDuration || !checkoutModalVisible) return;
+      if (!salonData._id || !totalDuration || !checkoutModalVisible) return;
       setLoadingSlots(true);
       setSlotsError(null);
       try {
         // Use the new GET API for slots
-        const url = `http://13.233.157.248:5000/api/bookings/available-slots?shopId=${salon._id}&duration=${totalDuration}`;
+        const url = `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/bookings/available-slots?shopId=${salonData._id}&duration=${totalDuration}`;
         const response = await fetch(url);
         if (!response.ok) {
           throw new Error("Failed to fetch slots");
         }
         const res = await response.json();
-        console.log("Available slots API response:", res);
-        // Assuming the API returns { results: { "YYYY-MM-DD": [slots] } }
         setAvailableSlots(res.results || {});
       } catch (err) {
         setSlotsError("Failed to fetch slots");
@@ -212,48 +229,35 @@ const SalonDetailScreen = () => {
       }
     };
     fetchSlots();
-  }, [salon._id, totalDuration, selectedDate, checkoutModalVisible]);
+  }, [salonData._id, totalDuration, selectedDate, checkoutModalVisible]);
 
   // Helper: get slots for selected date
   const slotsForDate =
     availableSlots[selectedDate.toISOString().slice(0, 10)] || [];
 
   // Render service item
-  const renderServiceItem = ({ item }) => {
-    const inCart = cart.some((cartItem) => cartItem.id === item.id);
-
-    return (
-      <View style={styles.serviceCard}>
-        <View style={styles.serviceInfo}>
-          <Text style={styles.serviceName}>{item.name}</Text>
-          {item.description ? (
-            <Text style={styles.serviceDescription}>{item.description}</Text>
-          ) : null}
-          <View style={styles.priceContainer}>
-            <Text style={styles.servicePrice}>₹{item.price.toFixed(2)}</Text>
-            {item.duration && (
-              <Text style={styles.discountText}>{item.duration} min</Text>
-            )}
-          </View>
+  const renderServiceItem = ({ item }) => (
+    <View style={styles.serviceCard}>
+      <View style={styles.serviceInfo}>
+        <Text style={styles.serviceName}>{item.name}</Text>
+        {item.description ? (
+          <Text style={styles.serviceDescription}>{item.description}</Text>
+        ) : null}
+        <View style={styles.priceContainer}>
+          <Text style={styles.servicePrice}>₹{item.price}</Text>
+          {item.duration && (
+            <Text style={styles.discountText}>{item.duration} min</Text>
+          )}
         </View>
-        {inCart ? (
-          <TouchableOpacity
-            style={[styles.addToCartButton, { backgroundColor: "#FF6B6B" }]}
-            onPress={() => removeFromCart(item.id)}
-          >
-            <Ionicons name="remove-circle-outline" size={22} color="#fff" />
-          </TouchableOpacity>
-        ) : (
-          <TouchableOpacity
-            style={styles.addToCartButton}
-            onPress={() => addToCart(item)}
-          >
-            <Text style={styles.addToCartButtonText}>Add</Text>
-          </TouchableOpacity>
-        )}
       </View>
-    );
-  };
+      <TouchableOpacity
+        style={styles.addToCartButton}
+        onPress={() => addToCart(item)}
+      >
+        <Text style={styles.addToCartButtonText}>Add</Text>
+      </TouchableOpacity>
+    </View>
+  );
 
   // Render review item (empty for now)
   const renderReviewItem = ({ item }) => (
@@ -406,18 +410,18 @@ const SalonDetailScreen = () => {
       {/* Salon Info */}
       <View style={styles.salonInfoContainer}>
         <View style={styles.salonNameRow}>
-          <Text style={styles.salonName}>{salon.shopName || "Salon"}</Text>
+          <Text style={styles.salonName}>{salonData.shopName || "Salon"}</Text>
           <View style={styles.ratingContainer}>
             <Ionicons name="star" size={16} color="#FFD700" />
-            <Text style={styles.ratingText}>{salon.rating || 0}</Text>
+            <Text style={styles.ratingText}>{salonData.rating || 0}</Text>
           </View>
         </View>
-        <Text style={styles.salonDescription}>{salon.shopOwnerName}</Text>
-        <Text style={styles.discountText}>{salon.salonType}</Text>
+        <Text style={styles.salonDescription}>{salonData.shopOwnerName}</Text>
+        <Text style={styles.discountText}>{salonData.salonType}</Text>
         <View style={styles.locationRow}>
           <Ionicons name="location-outline" size={16} color="#777" />
           <Text style={styles.locationText}>
-            {salon.address}, {salon.city}, {salon.state}
+            {salonData.address}, {salonData.city}, {salonData.state}
           </Text>
         </View>
       </View>
@@ -445,14 +449,19 @@ const SalonDetailScreen = () => {
         style={styles.contentContainer}
         showsVerticalScrollIndicator={false}
       >
-        {activeTab === "Services" && (
-          <FlatList
-            data={services}
-            renderItem={renderServiceItem}
-            keyExtractor={(item) => item.id}
-            scrollEnabled={false}
-          />
-        )}
+        {activeTab === "Services" &&
+          (servicesLoading ? (
+            <Text style={{ textAlign: "center", marginTop: 20 }}>
+              Loading services...
+            </Text>
+          ) : (
+            <FlatList
+              data={services}
+              renderItem={renderServiceItem}
+              keyExtractor={(item) => item._id || item.id}
+              scrollEnabled={false}
+            />
+          ))}
 
         {activeTab === "Reviews" && (
           <View style={styles.reviewsSection}>
@@ -493,7 +502,7 @@ const SalonDetailScreen = () => {
             <Text style={styles.giftCardTitle}>Gift a Service</Text>
             <Text style={styles.giftCardDescription}>
               Surprise someone special with a gift card for any service at{" "}
-              {salon.shopName || "Salon"}.
+              {salonData.shopName || "Salon"}.
             </Text>
             <TouchableOpacity style={styles.giftCardButton}>
               <Text style={styles.giftCardButtonText}>Purchase Gift Card</Text>
@@ -608,7 +617,7 @@ const SalonDetailScreen = () => {
             </View>
 
             <Text style={styles.restaurantName}>
-              {salon.shopName || "Salon"}
+              {salonData.shopName || "Salon"}
             </Text>
 
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -972,7 +981,7 @@ const SalonDetailScreen = () => {
               <View style={styles.bookingDetail}>
                 <Text style={styles.bookingDetailLabel}>Salon:</Text>
                 <Text style={styles.bookingDetailValue}>
-                  {salon.shopName || "Salon"}
+                  {salonData.shopName || "Salon"}
                 </Text>
               </View>
 

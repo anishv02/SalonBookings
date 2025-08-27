@@ -17,7 +17,7 @@ import { getToken } from "../../utils/authStorage"; // Import the getToken funct
 import jwt_decode from "jwt-decode";
 
 const ManageServicesScreen = ({ navigation, route }) => {
-  const shopId = route.params?.userId || "defaultShopId";
+  // const shopId = route.params?.userId || "defaultShopId";
 
   const [token, setToken] = useState("");
 
@@ -51,7 +51,8 @@ const ManageServicesScreen = ({ navigation, route }) => {
 
   // Usage
   const decoded = decodeJWT(token);
-  console.log(decoded);
+  const shopId = decoded?.shopId || "defaultShopId";
+  console.log("realshopId", shopId);
 
   const [services, setServices] = useState([]);
   const [predefinedServices, setPredefinedServices] = useState([]);
@@ -73,7 +74,7 @@ const ManageServicesScreen = ({ navigation, route }) => {
   useEffect(() => {
     fetchServices();
     fetchPredefinedServices();
-  }, []);
+  }, [shopId]);
 
   // Filter predefined services based on existing services
   const getFilteredPredefinedServices = () => {
@@ -99,7 +100,7 @@ const ManageServicesScreen = ({ navigation, route }) => {
   const fetchPredefinedServices = async () => {
     try {
       const response = await fetch(
-        "http://43.204.228.20:5000/api/services/predefined",
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/services/predefined",
         {
           method: "GET",
           headers: {
@@ -126,8 +127,9 @@ const ManageServicesScreen = ({ navigation, route }) => {
     setIsLoading(true);
 
     try {
+      console.log("shopId being used to fetch services:", shopId);
       const response = await fetch(
-        `http://43.204.228.20:5000/api/services/shop/${shopId}`,
+        `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/services/shop/${shopId}`,
         {
           method: "GET",
           headers: {
@@ -274,7 +276,7 @@ const ManageServicesScreen = ({ navigation, route }) => {
       }));
 
       const response = await fetch(
-        "http://43.204.228.20:5000/api/services/shop/addNewServices",
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/services/shop/addNewServices",
         {
           method: "POST",
           headers: {
@@ -321,11 +323,12 @@ const ManageServicesScreen = ({ navigation, route }) => {
   };
 
   const deleteService = async (serviceId) => {
+    console.log("Deleting service with ID:", serviceId);
     try {
       setIsLoading(true);
 
       const response = await fetch(
-        `http://43.204.228.20:5000/api/services/${serviceId}`,
+        `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/services/${serviceId}`,
         {
           method: "DELETE",
           headers: {
@@ -376,7 +379,7 @@ const ManageServicesScreen = ({ navigation, route }) => {
 
     try {
       const response = await fetch(
-        `http://43.204.228.20:5000/api/services/${editingService.id}`,
+        `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/services/${editingService.id}`,
         {
           method: "PUT",
           headers: {

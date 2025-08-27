@@ -10,9 +10,11 @@ import {
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
-const PersonalInfoScreen = ({ navigation }) => {
+const PersonalInfoScreen = ({ navigation, route }) => {
+  // Get email from navigation params if available
+  const initialEmail = route?.params?.email || "";
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(initialEmail);
   const [contactNumber, setContactNumber] = useState("");
   const [password, setPassword] = useState("");
   const [isSalonOwner, setIsSalonOwner] = useState(null);
@@ -32,10 +34,7 @@ const PersonalInfoScreen = ({ navigation }) => {
       return;
     }
 
-    // Prepare userType based on radio selection
     const userType = isSalonOwner ? "owner" : "customer";
-
-    // Prepare user data object
     const userData = {
       name,
       email,
@@ -45,31 +44,87 @@ const PersonalInfoScreen = ({ navigation }) => {
       gender,
     };
 
+    if (isSalonOwner) {
+      setLoading(true);
+      try {
+        // Register the user first
+        const registerResponse = await fetch(
+          "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/users/register",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(userData),
+          }
+        );
+        const registerResult = await registerResponse.json();
+
+        if (
+          !registerResponse.ok ||
+          !registerResult.user ||
+          !registerResult.user._id
+        ) {
+          Alert.alert(
+            "Registration Failed",
+            registerResult.message || "Please try again."
+          );
+          setLoading(false);
+          return;
+        }
+
+        // Pass userId and userData to SalonOwnerRegistration
+        navigation.replace("SalonOwnerRegistration", {
+          userId: registerResult.user._id,
+          userData,
+        });
+      } catch (error) {
+        Alert.alert("Error", "Network error. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await fetch(
-        "http://43.204.228.20:5000/api/users/register",
+      // 1. Register user
+      const registerResponse = await fetch(
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/users/register",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(userData),
         }
       );
-      const result = await response.json();
-      if (response.ok) {
-        await AsyncStorage.setItem(
-          "user",
-          JSON.stringify(result.user || userData)
-        );
-        if (isSalonOwner) {
-          navigation.replace("SalonOwnerRegistration", { userType });
-        } else {
-          navigation.replace("Home", { userType });
-        }
-      } else {
+      const registerResult = await registerResponse.json();
+
+      if (!registerResponse.ok) {
         Alert.alert(
           "Registration Failed",
-          result.message || "Please try again."
+          registerResult.message || "Please try again."
+        );
+        setLoading(false);
+        return;
+      }
+
+      // 2. Send OTP
+      const otpResponse = await fetch(
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/otp/send-otp",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email }),
+        }
+      );
+      const otpResult = await otpResponse.json();
+
+      if (otpResponse.ok) {
+        Alert.alert("OTP Sent", "Please check your email for the OTP.");
+        // Go to LoginScreen and show OTP input for this email
+        navigation.replace("Login", { email, showOtpInput: true });
+      } else {
+        Alert.alert(
+          "OTP Error",
+          otpResult.message || "Failed to send OTP. Please try again."
         );
       }
     } catch (error) {
@@ -163,11 +218,16 @@ const PersonalInfoScreen = ({ navigation }) => {
         onChangeText={setName}
       />
       <TextInput
-        style={styles.input}
+        style={[
+          styles.input,
+          initialEmail ? { backgroundColor: "#f3f3f3", color: "#aaa" } : {},
+        ]}
         placeholder="Email Address"
         keyboardType="email-address"
         value={email}
         onChangeText={setEmail}
+        editable={!initialEmail ? true : false}
+        selectTextOnFocus={!initialEmail ? true : false}
       />
       <TextInput
         style={styles.input}

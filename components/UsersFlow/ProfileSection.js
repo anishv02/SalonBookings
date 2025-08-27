@@ -18,8 +18,10 @@ import {
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons, FontAwesome5, MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { removeToken } from "../../utils/authStorage";
 
 const ProfileScreen = ({ route }) => {
+  console.log("route", route.params);
   const navigation = useNavigation();
   const [user, setUser] = useState(route?.params?.user || null);
   const [isEditModalVisible, setEditModalVisible] = useState(false);
@@ -107,11 +109,43 @@ const ProfileScreen = ({ route }) => {
           editedUser.lastName || editedUser.name.split(" ").slice(1).join(" "),
       };
 
-      // Save to AsyncStorage
-      await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+      // determine userId: prefer route param, then current user state, then editedUser._id
+      const userIdFromRoute = route?.params?.user?._id || route?.params?.userId;
+      const userId = userIdFromRoute || user?._id || updatedUser._id;
 
-      // Update local state
-      setUser(updatedUser);
+      if (!userId) {
+        // fallback to local save if no id available
+        await AsyncStorage.setItem("user", JSON.stringify(updatedUser));
+        setUser(updatedUser);
+        setIsEditMode(false);
+        Alert.alert("Success", "Profile updated locally (no userId).");
+        setIsLoading(false);
+        return;
+      }
+
+      // Call PATCH API to update user on server
+      const apiUrl = `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/users/${userId}`;
+      const res = await fetch(apiUrl, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(updatedUser),
+      });
+
+      const resJson = await res.json();
+
+      if (!res.ok) {
+        const message = resJson?.message || resJson?.error || "Update failed";
+        Alert.alert("Error", message);
+        setIsLoading(false);
+        return;
+      }
+
+      // Update AsyncStorage and local state with returned user object if available
+      const savedUser = resJson?.user || resJson || updatedUser;
+      await AsyncStorage.setItem("user", JSON.stringify(savedUser));
+      setUser(savedUser);
       setIsEditMode(false);
 
       Alert.alert("Success", "Profile updated successfully!");
@@ -124,17 +158,18 @@ const ProfileScreen = ({ route }) => {
   };
 
   const handleLogout = async () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Logout",
-        style: "destructive",
-        onPress: async () => {
-          await AsyncStorage.removeItem("user");
-          navigation.replace("PhoneVerification");
-        },
-      },
-    ]);
+    try {
+      // Remove the JWT token and user data from storage
+      await removeToken();
+
+      // Navigate to Login screen and reset navigation stack
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "Login" }],
+      });
+    } catch (error) {
+      Alert.alert("Error", "Failed to log out. Please try again.");
+    }
   };
 
   const getInitials = () => {

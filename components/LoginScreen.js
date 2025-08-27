@@ -9,6 +9,7 @@ import {
   Image,
 } from "react-native";
 import { storeToken } from "../utils/authStorage"; // at the top of LoginScreen
+import OTP from "./OTP"; // Import the new OTP component
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState("");
@@ -31,7 +32,7 @@ const LoginScreen = ({ navigation }) => {
     setLoading(true);
     try {
       const response = await fetch(
-        "http://43.204.228.20:5000/api/otp/send-otp",
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/otp/send-otp",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -40,7 +41,13 @@ const LoginScreen = ({ navigation }) => {
       );
       const result = await response.json();
 
-      if (response.ok) {
+      if (result?.message === "User not found") {
+        Alert.alert(
+          "User Not Found",
+          "Please complete your profile to register."
+        );
+        navigation.navigate("PersonalInfo", { email });
+      } else if (response.ok) {
         setShowOtpInput(true);
         Alert.alert("OTP Sent", "Please check your email for the OTP.");
       } else {
@@ -59,11 +66,11 @@ const LoginScreen = ({ navigation }) => {
   };
 
   // Check if owner has shop
-  const checkOwnerShop = async (userId) => {
-    console.log("userid", userId);
+  const checkOwnerShop = async (shopId) => {
+    console.log("userid", shopId);
     try {
       const response = await fetch(
-        `http://43.204.228.20:5000/api/shops/getShops?id=${userId}`,
+        `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/getShops?id=${shopId}`,
         {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -91,7 +98,7 @@ const LoginScreen = ({ navigation }) => {
   const checkCustomerExists = async (userId) => {
     try {
       const response = await fetch(
-        `http://43.204.228.20:5000/api/users/${userId}`,
+        `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/users/${userId}`,
         {
           method: "GET",
           headers: { "Content-Type": "application/json" },
@@ -122,7 +129,7 @@ const LoginScreen = ({ navigation }) => {
 
     try {
       const response = await fetch(
-        "http://43.204.228.20:5000/api/otp/verify-otp",
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/otp/verify-otp",
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -141,6 +148,7 @@ const LoginScreen = ({ navigation }) => {
         const _id = user?._id;
         const userType = user?.userType;
         const userEmail = user?.email;
+        const shopId = user?.shopId || null;
 
         console.log(
           "User ID:",
@@ -153,11 +161,39 @@ const LoginScreen = ({ navigation }) => {
 
         // ✅ Navigate based on userType and existence
         if (userType === "owner") {
-          const hasShop = await checkOwnerShop(_id);
-          if (hasShop) {
-            navigation.replace("SalonDashboard", { userId: _id });
+          // Fetch the salon object using shopId
+          const shopId = user?.shopId;
+          let salonObj = null;
+
+          if (shopId) {
+            try {
+              const salonResponse = await fetch(
+                `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/getShops?id=${shopId}`,
+                {
+                  method: "GET",
+                  headers: { "Content-Type": "application/json" },
+                }
+              );
+              const salonResult = await salonResponse.json();
+              // If API returns an array, pick the first salon, else use the object
+              salonObj =
+                Array.isArray(salonResult.shops) && salonResult.shops.length > 0
+                  ? salonResult.shops[0]
+                  : salonResult.shops || salonResult;
+            } catch (err) {
+              console.error("Error fetching salon object:", err);
+            }
+          }
+
+          if (salonObj) {
+            navigation.replace("SalonDashboard", {
+              shopId,
+              salonData: salonObj,
+              userId: user._id,
+            });
           } else {
-            navigation.replace("PersonalInfo", { userId: _id });
+            // fallback if no salon found
+            navigation.replace("PersonalInfo", { userId: user._id });
           }
         } else if (userType === "customer") {
           const customerExists = await checkCustomerExists(_id);
@@ -229,43 +265,12 @@ const LoginScreen = ({ navigation }) => {
           </TouchableOpacity>
         </>
       ) : (
-        <>
-          <Text style={{ fontSize: 16, marginBottom: 20, textAlign: "center" }}>
-            Enter the 6-digit OTP sent to your email
-          </Text>
-          <View style={styles.otpContainer}>
-            {[...Array(6)].map((_, idx) => (
-              <TextInput
-                key={idx}
-                style={styles.otpInput}
-                keyboardType="number-pad"
-                maxLength={1}
-                value={otp[idx] || ""}
-                onChangeText={(val) => {
-                  let newOtp = otp.split("");
-                  newOtp[idx] = val.replace(/[^0-9]/g, "");
-                  setOtp(newOtp.join("").slice(0, 6));
-                  // Move to next input if not last and value entered
-                  if (val && idx < 5) {
-                    const nextInput = `otpInput${idx + 1}`;
-                    if (refs[nextInput]) refs[nextInput].focus();
-                  }
-                }}
-                ref={(ref) => (refs[`otpInput${idx}`] = ref)}
-                autoFocus={idx === 0}
-              />
-            ))}
-          </View>
-          <TouchableOpacity
-            style={styles.button}
-            onPress={handleVerifyOtp}
-            disabled={otp.length !== 6 || loading}
-          >
-            <Text style={styles.buttonText}>
-              {loading ? "Verifying..." : "Verify OTP"}
-            </Text>
-          </TouchableOpacity>
-        </>
+        <OTP
+          otp={otp}
+          setOtp={setOtp}
+          loading={loading}
+          onVerify={handleVerifyOtp}
+        />
       )}
 
       {/* New User Option */}
@@ -421,23 +426,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#9370DB",
     fontWeight: "600",
-  },
-  otpContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginBottom: 24,
-    gap: 8,
-  },
-  otpInput: {
-    width: 40,
-    height: 48,
-    borderWidth: 1,
-    borderColor: "#9370DB",
-    borderRadius: 8,
-    textAlign: "center",
-    fontSize: 20,
-    marginHorizontal: 4,
-    backgroundColor: "#f9f9f9",
   },
 });
 
