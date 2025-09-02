@@ -129,7 +129,16 @@ const LandingPage = () => {
         useNativeDriver: true,
       }),
     ]).start(() => {
-      navigation.navigate(route, { shopId });
+      // always pass shopId; also pass seatCount when available so Seats screen receives it
+      const params = { shopId };
+      if (
+        salonData &&
+        salonData.seatCount !== undefined &&
+        salonData.seatCount !== null
+      ) {
+        params.seatCount = salonData.seatCount;
+      }
+      navigation.navigate(route, params);
     });
   };
 

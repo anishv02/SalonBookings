@@ -84,15 +84,38 @@ const SalonDetailScreen = () => {
     0
   );
 
-  // Add service to cart
-  const addToCart = (service) => {
-    setCart([...cart, service]);
-    // alert(`${service.name} added to cart!`);
+  // Helper function to check if service is already in cart
+  const isServiceInCart = (serviceId) => {
+    return cart.some((item) => item._id === serviceId || item.id === serviceId);
   };
 
-  // Remove service from cart
-  const removeFromCart = (serviceId) => {
-    setCart(cart.filter((item) => item.id !== serviceId));
+  // Add service to cart (prevent duplicates)
+  const addToCart = (service) => {
+    const serviceId = service._id || service.id;
+    if (isServiceInCart(serviceId)) {
+      alert(`${service.name} is already in your cart!`);
+      return;
+    }
+
+    // Add unique identifier for cart management
+    const cartItem = {
+      ...service,
+      cartId: `${serviceId}_${Date.now()}`, // Unique cart identifier
+    };
+    setCart([...cart, cartItem]);
+  };
+
+  // Remove service from cart (fix: remove only specific instance)
+  const removeFromCart = (cartId) => {
+    setCart(cart.filter((item) => item.cartId !== cartId));
+  };
+
+  // Remove service from main services list (when clicking minus button)
+  const removeServiceFromCart = (serviceId) => {
+    const updatedCart = cart.filter(
+      (item) => (item._id || item.id) !== serviceId
+    );
+    setCart(updatedCart);
   };
 
   // Toggle the cart modal
@@ -235,29 +258,44 @@ const SalonDetailScreen = () => {
   const slotsForDate =
     availableSlots[selectedDate.toISOString().slice(0, 10)] || [];
 
-  // Render service item
-  const renderServiceItem = ({ item }) => (
-    <View style={styles.serviceCard}>
-      <View style={styles.serviceInfo}>
-        <Text style={styles.serviceName}>{item.name}</Text>
-        {item.description ? (
-          <Text style={styles.serviceDescription}>{item.description}</Text>
-        ) : null}
-        <View style={styles.priceContainer}>
-          <Text style={styles.servicePrice}>₹{item.price}</Text>
-          {item.duration && (
-            <Text style={styles.discountText}>{item.duration} min</Text>
-          )}
+  // Render service item with improved cart logic
+  const renderServiceItem = ({ item }) => {
+    const serviceId = item._id || item.id;
+    const inCart = isServiceInCart(serviceId);
+
+    return (
+      <View style={styles.serviceCard}>
+        <View style={styles.serviceInfo}>
+          <Text style={styles.serviceName}>{item.name}</Text>
+          {item.description ? (
+            <Text style={styles.serviceDescription}>{item.description}</Text>
+          ) : null}
+          <View style={styles.priceContainer}>
+            <Text style={styles.servicePrice}>₹{item.price}</Text>
+            {item.duration && (
+              <Text style={styles.discountText}>{item.duration} min</Text>
+            )}
+          </View>
         </View>
+
+        {inCart ? (
+          <TouchableOpacity
+            style={styles.removeFromCartButton}
+            onPress={() => removeServiceFromCart(serviceId)}
+          >
+            <Text style={styles.removeFromCartButtonText}>-</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            style={styles.addToCartButton}
+            onPress={() => addToCart(item)}
+          >
+            <Text style={styles.addToCartButtonText}>Add</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      <TouchableOpacity
-        style={styles.addToCartButton}
-        onPress={() => addToCart(item)}
-      >
-        <Text style={styles.addToCartButtonText}>Add</Text>
-      </TouchableOpacity>
-    </View>
-  );
+    );
+  };
 
   // Render review item (empty for now)
   const renderReviewItem = ({ item }) => (
@@ -272,7 +310,7 @@ const SalonDetailScreen = () => {
     <Image source={item.source} style={styles.portfolioImage} />
   );
 
-  // Render cart item
+  // Render cart item with fixed remove functionality
   const renderCartItem = ({ item }) => (
     <View style={styles.cartItem}>
       <View style={styles.cartItemInfo}>
@@ -281,40 +319,12 @@ const SalonDetailScreen = () => {
       </View>
       <TouchableOpacity
         style={styles.removeButton}
-        onPress={() => removeFromCart(item.id)}
+        onPress={() => removeFromCart(item.cartId)}
       >
         <Ionicons name="close-circle" size={24} color="#FF6B6B" />
       </TouchableOpacity>
     </View>
   );
-
-  // Render time slot item (show only available slots)
-  // const renderTimeSlot = ({ item }) => (
-  //   <TouchableOpacity
-  //     style={[
-  //       styles.timeSlot,
-  //       selectedTime === item.startTime && styles.selectedTimeSlot,
-  //     ]}
-  //     onPress={() => setSelectedTime(item.startTime)}
-  //   >
-  //     <Text
-  //       style={[
-  //         styles.timeSlotText,
-  //         selectedTime === item.startTime && styles.selectedTimeSlotText,
-  //       ]}
-  //     >
-  //       {new Date(item.startTime).toLocaleTimeString([], {
-  //         hour: "2-digit",
-  //         minute: "2-digit",
-  //       })}{" "}
-  //       -{" "}
-  //       {new Date(item.endTime).toLocaleTimeString([], {
-  //         hour: "2-digit",
-  //         minute: "2-digit",
-  //       })}
-  //     </Text>
-  //   </TouchableOpacity>
-  // );
 
   // Add these helper functions after the existing helper functions (around line 95)
   const getAvailableDates = () => {
@@ -483,7 +493,7 @@ const SalonDetailScreen = () => {
         {activeTab === "Portfolio" && (
           <View style={styles.portfolioContainer}>
             <FlatList
-              data={PORTFOLIO}
+              data={[]}
               renderItem={renderPortfolioItem}
               keyExtractor={(item) => item.id}
               numColumns={2}
@@ -565,7 +575,9 @@ const SalonDetailScreen = () => {
                 <FlatList
                   data={cart}
                   renderItem={renderCartItem}
-                  keyExtractor={(item, index) => `${item.id}-${index}`}
+                  keyExtractor={(item, index) =>
+                    item.cartId || `${item.id}-${index}`
+                  }
                   style={styles.cartList}
                 />
 
@@ -801,7 +813,7 @@ const SalonDetailScreen = () => {
                         {slotsForDate
                           .filter(
                             (slot) =>
-                              new Date(slot.startTime).getHours() >= 8 &&
+                              new Date(slot.startTime).getHours() >= 12 &&
                               new Date(slot.startTime).getHours() < 18
                           )
                           .map((slot, index) => {
@@ -1259,6 +1271,19 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontWeight: "bold",
     fontSize: 14,
+  },
+  removeFromCartButton: {
+    backgroundColor: "#FF6B6B",
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 20,
+    minWidth: 40,
+    alignItems: "center",
+  },
+  removeFromCartButtonText: {
+    color: "#fff",
+    fontWeight: "bold",
+    fontSize: 18,
   },
   reviewCard: {
     backgroundColor: "#f8f8f8",
@@ -1737,11 +1762,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 2,
-  },
-  discountText: {
-    fontSize: 10,
-    color: "white",
-    fontWeight: "bold",
   },
   timeSelectionHint: {
     fontSize: 14,

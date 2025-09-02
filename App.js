@@ -25,6 +25,9 @@ import SeatsView from "./components/SalonsFlow/SeatsViewmanagement";
 import ManageServicesScreen from "./components/SalonsFlow/ManageServicesScreen";
 import LocationSelectionScreen from "./components/UsersFlow/LocationSelectScreen";
 import ScheduleManagementScreen from "./components/SalonsFlow/ScheduleManagement";
+import UserBookingsScreen from "./components/UsersFlow/UserBookings";
+import BookingDetailScreen from "./components/UsersFlow/BookingDetails";
+import RescheduleBooking from "./components/UsersFlow/RescheduleBooking";
 
 const Stack = createNativeStackNavigator();
 
@@ -207,6 +210,21 @@ export default function App() {
             LocationSelectionScreen,
             "LocationSelection"
           )}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="UserBookings"
+          component={screenWrapper(UserBookingsScreen, "UserBookings")}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="BookingDetail"
+          component={BookingDetailScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="RescheduleBooking"
+          component={RescheduleBooking}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

@@ -1,5 +1,5 @@
 // screens/SearchScreen.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
   View,
   Text,
@@ -11,9 +11,12 @@ import {
   StatusBar,
   ScrollView,
   Keyboard,
+  ActivityIndicator,
+  Alert,
 } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
+import debounce from "lodash/debounce";
 
 // Categories data (same as HomeScreen)
 const CATEGORIES = [
@@ -40,56 +43,140 @@ const POPULAR_SEARCHES = [
 const SearchScreen = () => {
   const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState("");
-  const [allSalons, setAllSalons] = useState([]);
   const [searchResults, setSearchResults] = useState([]);
   const [showDropdown, setShowDropdown] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [initialLoad, setInitialLoad] = useState(true);
 
-  // Fetch all salons from API on mount
-  useEffect(() => {
-    const fetchSalons = async () => {
-      try {
-        const response = await fetch("http://192.168.1.4:3000/getShopDetails");
-        const data = await response.json();
-        let salonsData;
-        if (Array.isArray(data)) {
-          salonsData = data;
-        } else if (data && typeof data === "object" && data._id) {
-          salonsData = [data];
-        } else {
-          salonsData = data.salons || data.shops || [];
-        }
-        setAllSalons(salonsData);
-      } catch (err) {
-        setAllSalons([]);
-      }
-    };
-    fetchSalons();
-  }, []);
-
-  // Update search results as user types
-  useEffect(() => {
-    if (searchQuery.trim().length === 0) {
+  // Fetch salons function
+  const fetchSalons = async (query) => {
+    if (!query.trim()) {
       setSearchResults([]);
-      setShowDropdown(false);
+      setLoading(false);
       return;
     }
-    const results = allSalons.filter((salon) =>
-      salon.shopName.toLowerCase().includes(searchQuery.trim().toLowerCase())
-    );
-    setSearchResults(results);
-    setShowDropdown(true);
-  }, [searchQuery, allSalons]);
 
-  // Render category item
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/getShops"
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      // Normalize and filter the response data based on search query
+      let salonsData = Array.isArray(data.shops)
+        ? data.shops
+        : Array.isArray(data)
+        ? data
+        : [];
+
+      // Filter salons based on search query (case insensitive)
+      salonsData = salonsData.filter(
+        (salon) =>
+          salon.shopName.toLowerCase().includes(query.toLowerCase()) ||
+          salon.city?.toLowerCase().includes(query.toLowerCase()) ||
+          salon.state?.toLowerCase().includes(query.toLowerCase())
+      );
+
+      setSearchResults(salonsData);
+    } catch (err) {
+      console.error("Error fetching salons:", err);
+      setError("Failed to fetch salons. Please try again.");
+      setSearchResults([]);
+    } finally {
+      setLoading(false);
+      setInitialLoad(false);
+    }
+  };
+
+  // Debounced search function
+  const debouncedFetch = useCallback(
+    debounce((query) => {
+      fetchSalons(query);
+    }, 500),
+    []
+  );
+
+  // Effect for search query changes
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      setShowDropdown(true);
+      debouncedFetch(searchQuery.trim());
+    } else {
+      setShowDropdown(false);
+      setSearchResults([]);
+      setInitialLoad(false); // Reset initial load when query is empty
+    }
+
+    // Cleanup function
+    return () => {
+      debouncedFetch.cancel();
+    };
+  }, [searchQuery, debouncedFetch]);
+
+  // Handle salon selection
+  const handleSalonSelect = (salon) => {
+    setShowDropdown(false);
+    setSearchQuery("");
+    Keyboard.dismiss();
+    navigation.navigate("SalonDetail", {
+      salonId: salon._id,
+      salonName: salon.shopName,
+      salonData: salon,
+    });
+  };
+
+  // Render search results
+  const renderSearchResult = ({ item }) => (
+    <TouchableOpacity
+      style={styles.searchDropdownItem}
+      onPress={() => handleSalonSelect(item)}
+    >
+      <View style={styles.searchResultContent}>
+        <View style={styles.searchResultMain}>
+          <Text style={styles.searchDropdownText}>{item.shopName}</Text>
+          <Text style={styles.searchDropdownSubText}>
+            {item.city}
+            {item.state ? `, ${item.state}` : ""}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={20} color="#999" />
+      </View>
+      {item.salonType && (
+        <View
+          style={[
+            styles.salonTypeBadge,
+            {
+              backgroundColor:
+                item.salonType === "Unisex" ? "#9370DB" : "#4CAF50",
+            },
+          ]}
+        >
+          <Text style={styles.salonTypeText}>{item.salonType}</Text>
+        </View>
+      )}
+    </TouchableOpacity>
+  );
+
+  // Render category items
   const renderCategoryItem = ({ item }) => (
     <TouchableOpacity
       style={styles.categoryItem}
       onPress={() => {
-        // navigation.navigate("CategoryResults", { category: item.name });
+        setSearchQuery(item.name);
+        setShowDropdown(true);
       }}
     >
       <View style={styles.categoryIconContainer}>
-        <FontAwesome5 name={item.icon} size={18} color="#fff" />
+        <FontAwesome5 name={item.icon} size={20} color="#FFF" />
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
     </TouchableOpacity>
@@ -123,92 +210,132 @@ const SearchScreen = () => {
               onChangeText={setSearchQuery}
               autoFocus={true}
               returnKeyType="search"
-              onFocus={() => setShowDropdown(true)}
-              onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+              // Remove or modify onFocus to not show dropdown immediately
+              // onFocus={() => setShowDropdown(true)}
             />
             {searchQuery.length > 0 && (
               <TouchableOpacity
                 style={styles.clearButton}
-                onPress={() => setSearchQuery("")}
+                onPress={() => {
+                  setSearchQuery("");
+                  setShowDropdown(false);
+                }}
               >
                 <Ionicons name="close-circle" size={18} color="#999" />
               </TouchableOpacity>
             )}
           </View>
-          {showDropdown && searchResults.length > 0 && (
+
+          {/* Search Results Dropdown */}
+          {showDropdown && (
             <View style={styles.searchDropdown}>
-              <FlatList
-                data={searchResults}
-                keyExtractor={(item) => item._id}
-                renderItem={({ item }) => (
+              {loading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="small" color="#9370DB" />
+                  <Text style={styles.loadingText}>Searching...</Text>
+                </View>
+              ) : error ? (
+                <View style={styles.errorContainer}>
+                  <Text style={styles.errorText}>{error}</Text>
                   <TouchableOpacity
-                    style={styles.searchDropdownItem}
-                    onPress={() => {
-                      setShowDropdown(false);
-                      setSearchQuery("");
-                      Keyboard.dismiss();
-                      navigation.navigate("SalonDetail", {
-                        salonId: item._id,
-                        salonName: item.shopName,
-                        salonData: item,
-                      });
-                    }}
+                    style={styles.retryButton}
+                    onPress={() => fetchSalons(searchQuery)}
                   >
-                    <Text style={styles.searchDropdownText}>
-                      {item.shopName}
-                    </Text>
-                    <Text style={styles.searchDropdownSubText}>
-                      {item.city}, {item.state}
-                    </Text>
+                    <Text style={styles.retryButtonText}>Retry</Text>
                   </TouchableOpacity>
-                )}
-                style={{ maxHeight: 180 }}
-                keyboardShouldPersistTaps="handled"
-              />
+                </View>
+              ) : searchResults.length > 0 ? (
+                <FlatList
+                  data={searchResults}
+                  renderItem={renderSearchResult}
+                  keyExtractor={(item) => item._id}
+                  style={styles.resultsList}
+                  keyboardShouldPersistTaps="handled"
+                  maxToRenderPerBatch={10}
+                  windowSize={10}
+                  removeClippedSubviews={true}
+                />
+              ) : (
+                !initialLoad && (
+                  <View style={styles.noResultsContainer}>
+                    <Text style={styles.noResultsText}>
+                      No salons found matching "{searchQuery}"
+                    </Text>
+                  </View>
+                )
+              )}
             </View>
           )}
         </View>
       </View>
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        style={styles.scrollView}
-      >
-        {/* Popular Searches Section */}
-        <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Popular Searches</Text>
-          <View style={styles.popularSearchesContainer}>
-            {POPULAR_SEARCHES.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={styles.popularSearchItem}
-                onPress={() => {
-                  setSearchQuery(item);
-                }}
-              >
-                <Text style={styles.popularSearchText}>{item}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        {/* Categories Section */}
-        <View className="sectionContainer">
-          <Text style={styles.sectionTitle}>Filter by Category</Text>
-          <View style={styles.categoriesGrid}>
-            <FlatList
-              data={CATEGORIES}
-              renderItem={renderCategoryItem}
-              keyExtractor={(item) => item.id}
-              numColumns={4}
-              scrollEnabled={false}
-              columnWrapperStyle={styles.categoryRow}
-            />
-          </View>
-        </View>
-      </ScrollView>
     </SafeAreaView>
   );
+};
+
+const newStyles = {
+  loadingContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 15,
+  },
+  loadingText: {
+    marginLeft: 10,
+    fontSize: 14,
+    color: "#666",
+  },
+  errorContainer: {
+    padding: 15,
+    alignItems: "center",
+  },
+  errorText: {
+    fontSize: 14,
+    color: "#dc2626",
+    marginBottom: 10,
+  },
+  retryButton: {
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    backgroundColor: "#9370DB",
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  noResultsContainer: {
+    padding: 15,
+    alignItems: "center",
+  },
+  noResultsText: {
+    fontSize: 14,
+    color: "#666",
+  },
+  searchResultContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  searchResultMain: {
+    flex: 1,
+    marginRight: 10,
+  },
+  salonTypeBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 5,
+    alignSelf: "flex-start",
+  },
+  salonTypeText: {
+    color: "#fff",
+    fontSize: 12,
+    fontWeight: "500",
+  },
+  resultsList: {
+    maxHeight: 300,
+  },
 };
 
 const styles = StyleSheet.create({
@@ -334,6 +461,7 @@ const styles = StyleSheet.create({
     color: "#333",
     textAlign: "center",
   },
+  ...newStyles,
 });
 
 export default SearchScreen;

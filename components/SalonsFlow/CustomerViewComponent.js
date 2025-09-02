@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,165 +9,148 @@ import {
   SafeAreaView,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { jwtDecode } from "jwt-decode";
+import { getToken } from "../../utils/authStorage";
+import axios from "axios";
 
 const CustomersView = (props) => {
   const navigation = useNavigation();
+  const route = useRoute();
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState("all"); // 'all', 'upcoming', 'completed'
+  const [filterType, setFilterType] = useState("all"); // 'all', 'upcoming', 'completed', 'cancelled'
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const selectedSeat = props.selectedSeat || props.route?.params?.selectedSeat;
   console.log("Selected Seat:", selectedSeat);
 
-  // Sample customer data for each seat with status
-  const customersData = {
-    1: [
-      {
-        id: 1,
-        name: "Robert Fox",
-        time: "09:00 AM",
-        status: "completed",
-        services: [
-          { name: "Hair & Beard Cut", price: 315 },
-          { name: "Face Wash", price: 445 },
-        ],
-      },
-      {
-        id: 2,
-        name: "Wade Warren",
-        time: "10:30 AM",
-        status: "upcoming",
-        services: [
-          { name: "Hair Color", price: 125 },
-          { name: "Body Massage", price: 1125 },
-        ],
-      },
-      {
-        id: 3,
-        name: "Brooklyn Simmons",
-        time: "11:45 AM",
-        status: "upcoming",
-        services: [{ name: "Hair Cut", price: 250 }],
-      },
-    ],
-    2: [
-      {
-        id: 4,
-        name: "Dianne Russell",
-        time: "10:00 AM",
-        status: "completed",
-        services: [
-          { name: "Hair & Beard Cut", price: 315 },
-          { name: "Hair Color", price: 125 },
-        ],
-      },
-      {
-        id: 5,
-        name: "Courtney Henry",
-        time: "11:15 AM",
-        status: "upcoming",
-        services: [{ name: "Body Massage", price: 1125 }],
-      },
-    ],
-    3: [
-      {
-        id: 6,
-        name: "Savannah Nguyen",
-        time: "09:30 AM",
-        status: "completed",
-        services: [
-          { name: "Hair Cut", price: 250 },
-          { name: "Face Wash", price: 445 },
-        ],
-      },
-      {
-        id: 7,
-        name: "Guy Hawkins",
-        time: "12:00 PM",
-        status: "upcoming",
-        services: [{ name: "Hair & Beard Cut", price: 315 }],
-      },
-    ],
-    4: [
-      {
-        id: 8,
-        name: "Kristin Watson",
-        time: "10:15 AM",
-        status: "upcoming",
-        services: [
-          { name: "Hair Color", price: 125 },
-          { name: "Body Massage", price: 1125 },
-        ],
-      },
-    ],
-    5: [
-      {
-        id: 9,
-        name: "Cody Fisher",
-        time: "09:45 AM",
-        status: "completed",
-        services: [{ name: "Hair Cut", price: 250 }],
-      },
-      {
-        id: 10,
-        name: "Annette Black",
-        time: "11:30 AM",
-        status: "upcoming",
-        services: [
-          { name: "Hair & Beard Cut", price: 315 },
-          { name: "Face Wash", price: 445 },
-        ],
-      },
-    ],
-    6: [
-      {
-        id: 11,
-        name: "Jacob Jones",
-        time: "10:45 AM",
-        status: "upcoming",
-        services: [{ name: "Hair Color", price: 125 }],
-      },
-    ],
-    7: [
-      {
-        id: 12,
-        name: "Albert Flores",
-        time: "09:15 AM",
-        status: "completed",
-        services: [{ name: "Body Massage", price: 1125 }],
-      },
-      {
-        id: 13,
-        name: "Darrell Steward",
-        time: "11:00 AM",
-        status: "upcoming",
-        services: [
-          { name: "Hair & Beard Cut", price: 315 },
-          { name: "Hair Color", price: 125 },
-        ],
-      },
-    ],
-    8: [
-      {
-        id: 14,
-        name: "Cameron Williamson",
-        time: "10:30 AM",
-        status: "upcoming",
-        services: [
-          { name: "Hair Cut", price: 250 },
-          { name: "Body Massage", price: 1125 },
-        ],
-      },
-    ],
+  // Fetch bookings from API
+  const fetchBookings = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Get token and decode for shopId
+      const token = await getToken();
+      let decoded = null;
+      if (token) {
+        try {
+          decoded = jwtDecode(token);
+        } catch (err) {
+          console.error("JWT decode failed", err);
+        }
+      }
+
+      // Determine shopId from various sources
+      const shopId =
+        route?.params?.shopId ||
+        decoded?.shopId ||
+        decoded?.salonId ||
+        decoded?.salonObj?._id;
+
+      const userType =
+        decoded?.userType || decoded?.role || decoded?.type || "owner";
+
+      if (!shopId) {
+        setError("Shop ID not found");
+        setLoading(false);
+        return;
+      }
+
+      const response = await axios.get(
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/bookings/get-bookings-by-Id",
+        {
+          params: {
+            Id: shopId,
+            userType: userType,
+          },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+
+      const fetchedBookings = response.data.bookings || response.data || [];
+      setBookings(fetchedBookings);
+    } catch (err) {
+      console.error("Error fetching bookings:", err);
+      setError("Failed to load bookings. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+
+  // Filter bookings by selected seat
+  const getSeatBookings = () => {
+    if (!selectedSeat || !bookings.length) {
+      return [];
+    }
+
+    // Filter bookings for the selected seat
+    return bookings.filter((booking) => {
+      const seatStr = booking.seatNumber || booking.seat || "";
+      const match = seatStr.match(/\d+/);
+      if (!match) return false;
+      const seatIndex = parseInt(match[0], 10);
+      return seatIndex === selectedSeat;
+    });
+  };
+
+  // Transform booking data to match the expected format
+  const transformBookingToCustomer = (booking) => {
+    const startTime = new Date(booking.startTime);
+    const endTime = new Date(booking.endTime);
+    const now = new Date();
+
+    // Determine status based on timing and booking status
+    let status;
+    if (booking.status === "Cancelled") {
+      status = "cancelled";
+    } else if (endTime <= now) {
+      status = "completed";
+    } else if (startTime > now && booking.status === "Booked") {
+      status = "upcoming";
+    } else {
+      status = "upcoming"; // default for "Booked" status
+    }
+
+    return {
+      id: booking._id,
+      name:
+        (booking.user && (booking.user.name || booking.user.displayName)) ||
+        (typeof booking.user === "string"
+          ? `User ${booking.user.slice(-4)}`
+          : "Customer"),
+      time: startTime.toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      }),
+      status: status,
+      services:
+        booking.services?.map((service) => ({
+          name: service.name,
+          price: service.price,
+        })) || [],
+      totalPrice: booking.totalPrice,
+      totalDuration: booking.totalDuration,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      seatNumber: booking.seatNumber,
+      originalBooking: booking, // Keep original booking data for navigation
+    };
   };
 
   const getFilteredCustomers = () => {
-    if (!selectedSeat || !customersData[selectedSeat]) {
-      return { upcoming: [], completed: [] };
-    }
-
-    const customers = customersData[selectedSeat].filter((customer) =>
-      customer.name.toLowerCase().includes(searchTerm.toLowerCase().trim())
-    );
+    const seatBookings = getSeatBookings();
+    const customers = seatBookings
+      .map(transformBookingToCustomer)
+      .filter((customer) =>
+        customer.name.toLowerCase().includes(searchTerm.toLowerCase().trim())
+      );
 
     const upcoming = customers.filter(
       (customer) => customer.status === "upcoming"
@@ -175,8 +158,11 @@ const CustomersView = (props) => {
     const completed = customers.filter(
       (customer) => customer.status === "completed"
     );
+    const cancelled = customers.filter(
+      (customer) => customer.status === "cancelled"
+    );
 
-    return { upcoming, completed };
+    return { upcoming, completed, cancelled };
   };
 
   const calculateTotal = (services) => {
@@ -187,92 +173,189 @@ const CustomersView = (props) => {
     navigation.navigate("customerDetails", {
       selectedCustomer: customer,
       selectedSeat: selectedSeat,
+      booking: customer.originalBooking, // Pass original booking data
     });
   };
 
-  const { upcoming, completed } = getFilteredCustomers();
+  const { upcoming, completed, cancelled } = getFilteredCustomers();
   const totalUpcoming = upcoming.length;
   const totalCompleted = completed.length;
+  const totalCancelled = cancelled.length;
 
   const getDisplayCustomers = () => {
-    if (filterType === "upcoming") return { upcoming, completed: [] };
-    if (filterType === "completed") return { upcoming: [], completed };
-    return { upcoming, completed };
+    if (filterType === "upcoming")
+      return { upcoming, completed: [], cancelled: [] };
+    if (filterType === "completed")
+      return { upcoming: [], completed, cancelled: [] };
+    if (filterType === "cancelled")
+      return { upcoming: [], completed: [], cancelled };
+    return { upcoming, completed, cancelled };
   };
 
-  const { upcoming: displayUpcoming, completed: displayCompleted } =
-    getDisplayCustomers();
+  const {
+    upcoming: displayUpcoming,
+    completed: displayCompleted,
+    cancelled: displayCancelled,
+  } = getDisplayCustomers();
 
-  const renderCustomerCard = (customer, isUpcoming = true) => (
-    <TouchableOpacity
-      key={customer.id}
-      onPress={() => handleCustomerClick(customer)}
-      style={[
-        styles.customerCard,
-        isUpcoming ? styles.upcomingCard : styles.completedCard,
-      ]}
-    >
-      <View style={styles.customerContent}>
-        <View style={styles.customerHeader}>
-          <View
-            style={[
-              styles.customerAvatar,
-              { backgroundColor: isUpcoming ? "#16a34a" : "#6b7280" },
-            ]}
-          >
-            <Icon name="person" size={16} color="white" />
-          </View>
-          <View style={styles.customerInfo}>
-            <Text style={styles.customerName}>{customer.name}</Text>
-            <View style={styles.timeContainer}>
-              <Icon name="schedule" size={12} color="#6b7280" />
-              <Text style={styles.timeText}>{customer.time}</Text>
-            </View>
-          </View>
-          <View
-            style={[
-              styles.statusBadge,
-              { backgroundColor: isUpcoming ? "#dcfce7" : "#f3f4f6" },
-            ]}
-          >
-            <Text
+  const renderCustomerCard = (customer, statusType) => {
+    const isUpcoming = statusType === "upcoming";
+    const isCancelled = statusType === "cancelled";
+
+    return (
+      <TouchableOpacity
+        key={customer.id}
+        onPress={() => handleCustomerClick(customer)}
+        style={[
+          styles.customerCard,
+          isUpcoming
+            ? styles.upcomingCard
+            : isCancelled
+            ? styles.cancelledCard
+            : styles.completedCard,
+        ]}
+      >
+        <View style={styles.customerContent}>
+          <View style={styles.customerHeader}>
+            <View
               style={[
-                styles.statusText,
-                { color: isUpcoming ? "#16a34a" : "#6b7280" },
+                styles.customerAvatar,
+                {
+                  backgroundColor: isUpcoming
+                    ? "#16a34a"
+                    : isCancelled
+                    ? "#dc2626"
+                    : "#6b7280",
+                },
               ]}
             >
-              {isUpcoming ? "Upcoming" : "Completed"}
+              <Icon name="person" size={16} color="white" />
+            </View>
+            <View style={styles.customerInfo}>
+              <Text style={styles.customerName}>{customer.name}</Text>
+              <View style={styles.timeContainer}>
+                <Icon name="schedule" size={12} color="#6b7280" />
+                <Text style={styles.timeText}>{customer.time}</Text>
+              </View>
+            </View>
+            <View
+              style={[
+                styles.statusBadge,
+                {
+                  backgroundColor: isUpcoming
+                    ? "#dcfce7"
+                    : isCancelled
+                    ? "#fee2e2"
+                    : "#f3f4f6",
+                },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.statusText,
+                  {
+                    color: isUpcoming
+                      ? "#16a34a"
+                      : isCancelled
+                      ? "#dc2626"
+                      : "#6b7280",
+                  },
+                ]}
+              >
+                {statusType.charAt(0).toUpperCase() + statusType.slice(1)}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.servicesContainer}>
+            {customer.services.slice(0, 2).map((service, index) => (
+              <View key={index} style={styles.serviceTag}>
+                <Text style={styles.serviceText}>{service.name}</Text>
+                <Text style={styles.servicePrice}>₹{service.price}</Text>
+              </View>
+            ))}
+            {customer.services.length > 2 && (
+              <View style={styles.serviceTag}>
+                <Text style={styles.serviceText}>
+                  +{customer.services.length - 2} more
+                </Text>
+              </View>
+            )}
+          </View>
+
+          <View style={styles.customerFooter}>
+            <Text style={styles.servicesCount}>
+              {customer.services.length} services • {customer.totalDuration} min
+            </Text>
+            <Text style={styles.totalAmount}>
+              Total: ₹{customer.totalPrice}
             </Text>
           </View>
         </View>
+      </TouchableOpacity>
+    );
+  };
 
-        <View style={styles.servicesContainer}>
-          {customer.services.slice(0, 2).map((service, index) => (
-            <View key={index} style={styles.serviceTag}>
-              <Text style={styles.serviceText}>{service.name}</Text>
-              <Text style={styles.servicePrice}>₹{service.price}</Text>
-            </View>
-          ))}
-          {customer.services.length > 2 && (
-            <View style={styles.serviceTag}>
-              <Text style={styles.serviceText}>
-                +{customer.services.length - 2} more
+  // Loading state
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("seats")}
+              style={styles.backButton}
+            >
+              <Icon name="arrow-back" size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <View style={styles.headerText}>
+              <Text style={styles.headerTitle}>
+                Seat {selectedSeat} - Appointments
               </Text>
+              <Text style={styles.headerSubtitle}>Loading...</Text>
             </View>
-          )}
+          </View>
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading appointments...</Text>
+          </View>
         </View>
+      </SafeAreaView>
+    );
+  }
 
-        <View style={styles.customerFooter}>
-          <Text style={styles.servicesCount}>
-            {customer.services.length} services
-          </Text>
-          <Text style={styles.totalAmount}>
-            Total: ₹{calculateTotal(customer.services)}
-          </Text>
+  // Error state
+  if (error) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("seats")}
+              style={styles.backButton}
+            >
+              <Icon name="arrow-back" size={24} color="#ffffff" />
+            </TouchableOpacity>
+            <View style={styles.headerText}>
+              <Text style={styles.headerTitle}>
+                Seat {selectedSeat} - Appointments
+              </Text>
+              <Text style={styles.headerSubtitle}>Error loading data</Text>
+            </View>
+          </View>
+          <View style={styles.errorContainer}>
+            <Icon name="error-outline" size={48} color="#dc2626" />
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={fetchBookings}
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
         </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -316,10 +399,17 @@ const CustomersView = (props) => {
           </View>
           <View style={styles.compactStatItem}>
             <View style={styles.compactStatIcon}>
+              <Icon name="cancel" size={16} color="#dc2626" />
+            </View>
+            <Text style={styles.compactStatNumber}>{totalCancelled}</Text>
+            <Text style={styles.compactStatLabel}>Cancelled</Text>
+          </View>
+          <View style={styles.compactStatItem}>
+            <View style={styles.compactStatIcon}>
               <Icon name="people" size={16} color="#3b82f6" />
             </View>
             <Text style={styles.compactStatNumber}>
-              {totalUpcoming + totalCompleted}
+              {totalUpcoming + totalCompleted + totalCancelled}
             </Text>
             <Text style={styles.compactStatLabel}>Total</Text>
           </View>
@@ -377,6 +467,22 @@ const CustomersView = (props) => {
                 Completed
               </Text>
             </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setFilterType("cancelled")}
+              style={[
+                styles.filterButton,
+                filterType === "cancelled" && styles.activeFilter,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.filterButtonText,
+                  filterType === "cancelled" && styles.activeFilterText,
+                ]}
+              >
+                Cancelled
+              </Text>
+            </TouchableOpacity>
           </View>
 
           {/* Search Bar */}
@@ -412,7 +518,7 @@ const CustomersView = (props) => {
                 </View>
               </View>
               {displayUpcoming.map((customer) =>
-                renderCustomerCard(customer, true)
+                renderCustomerCard(customer, "upcoming")
               )}
             </View>
           )}
@@ -432,21 +538,45 @@ const CustomersView = (props) => {
                 </View>
               </View>
               {displayCompleted.map((customer) =>
-                renderCustomerCard(customer, false)
+                renderCustomerCard(customer, "completed")
+              )}
+            </View>
+          )}
+
+          {/* Cancelled Appointments */}
+          {displayCancelled.length > 0 && (
+            <View style={styles.sectionContainer}>
+              <View style={styles.sectionHeader}>
+                <Icon name="cancel" size={18} color="#dc2626" />
+                <Text style={styles.sectionTitle}>Cancelled</Text>
+                <View
+                  style={[styles.sectionBadge, { backgroundColor: "#fee2e2" }]}
+                >
+                  <Text style={[styles.sectionBadgeText, { color: "#dc2626" }]}>
+                    {displayCancelled.length}
+                  </Text>
+                </View>
+              </View>
+              {displayCancelled.map((customer) =>
+                renderCustomerCard(customer, "cancelled")
               )}
             </View>
           )}
 
           {/* No Results */}
-          {displayUpcoming.length === 0 && displayCompleted.length === 0 && (
-            <View style={styles.noResults}>
-              <Icon name="search-off" size={48} color="#9ca3af" />
-              <Text style={styles.noResultsText}>No appointments found</Text>
-              <Text style={styles.noResultsSubtext}>
-                Try adjusting your search or filter
-              </Text>
-            </View>
-          )}
+          {displayUpcoming.length === 0 &&
+            displayCompleted.length === 0 &&
+            displayCancelled.length === 0 && (
+              <View style={styles.noResults}>
+                <Icon name="search-off" size={48} color="#9ca3af" />
+                <Text style={styles.noResultsText}>No appointments found</Text>
+                <Text style={styles.noResultsSubtext}>
+                  {searchTerm
+                    ? "Try adjusting your search"
+                    : `No bookings for seat ${selectedSeat}`}
+                </Text>
+              </View>
+            )}
         </ScrollView>
       </View>
     </SafeAreaView>
@@ -632,7 +762,7 @@ const styles = StyleSheet.create({
     color: "#16a34a",
   },
 
-  // Customer Cards - Reduced padding
+  // Customer Cards
   customerCard: {
     borderRadius: 12,
     marginBottom: 8,
@@ -651,6 +781,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderWidth: 1,
     borderColor: "#e5e7eb",
+  },
+  cancelledCard: {
+    backgroundColor: "#fef2f2",
+    borderWidth: 1,
+    borderColor: "#dc2626",
   },
   customerContent: {
     padding: 12,
@@ -736,6 +871,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#9370DB",
+  },
+
+  // Loading and Error States
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#6b7280",
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: "#dc2626",
+    textAlign: "center",
+    marginVertical: 15,
+  },
+  retryButton: {
+    backgroundColor: "#9370DB",
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
   },
 
   // No Results

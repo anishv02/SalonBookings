@@ -656,19 +656,14 @@ const ProfileScreen = ({ route }) => {
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.optionItem}>
+          <TouchableOpacity
+            style={styles.optionItem}
+            onPress={() => navigation.navigate("UserBookings")}
+          >
             <View style={styles.optionIcon}>
               <Ionicons name="calendar-outline" size={22} color="#9370DB" />
             </View>
-            <Text style={styles.optionText}>Appointments</Text>
-            <Ionicons name="chevron-forward" size={18} color="#999" />
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.optionItem}>
-            <View style={styles.optionIcon}>
-              <Ionicons name="time-outline" size={22} color="#9370DB" />
-            </View>
-            <Text style={styles.optionText}>Past Bookings</Text>
+            <Text style={styles.optionText}>My Bookings</Text>
             <Ionicons name="chevron-forward" size={18} color="#999" />
           </TouchableOpacity>
 

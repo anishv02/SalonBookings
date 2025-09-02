@@ -28,6 +28,10 @@ import {
   spacing,
   borderRadius,
   deviceType,
+  getCardWidth,
+  getButtonHeight,
+  getHeaderHeight,
+  safeArea,
 } from "../../responsive";
 import { jwtDecode } from "jwt-decode";
 import { getToken } from "../../utils/authStorage";
@@ -64,19 +68,24 @@ function getDistanceFromLatLonInKm(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.asin(Math.sqrt(a));
 }
 
+// Enhanced font helper with device-specific optimizations
 const font = (size) => {
-  if (Platform.OS === "android") {
-    return responsiveFontSize(size * 0.92);
+  let adjustedSize = responsiveFontSize(size);
+
+  // Fine-tune for specific device types
+  if (deviceType.isSmallDevice && size > 16) {
+    adjustedSize = adjustedSize * 0.95; // Slightly smaller for large text on small screens
   }
-  return responsiveFontSize(size);
+
+  if (deviceType.isTablet && size < 12) {
+    adjustedSize = adjustedSize * 1.1; // Boost small text on tablets
+  }
+
+  return adjustedSize;
 };
 
 const HomeScreen = ({ route }) => {
   const navigation = useNavigation();
-
-  // Get user ID from navigation params
-  // const { userId } = route?.params || {};
-
   const [userId, setUserId] = useState(null);
 
   // User states
@@ -85,8 +94,8 @@ const HomeScreen = ({ route }) => {
   const [userError, setUserError] = useState(null);
 
   const [userName, setUserName] = useState("");
-  const [allSalons, setAllSalons] = useState([]); // Store all salons
-  const [nearbySalons, setNearbySalons] = useState([]); // Store filtered salons
+  const [allSalons, setAllSalons] = useState([]);
+  const [nearbySalons, setNearbySalons] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -126,13 +135,11 @@ const HomeScreen = ({ route }) => {
       const apiResponse = await response.json();
       console.log("API Response:", apiResponse);
 
-      // Extract user data from the nested structure
       const userData = apiResponse.user || apiResponse;
       console.log("User data extracted:", userData);
 
       setUser(userData);
 
-      // Update user name if available
       if (userData.name || userData.firstName || userData.username) {
         setUserName(userData.name || userData.firstName || userData.username);
       }
@@ -140,7 +147,6 @@ const HomeScreen = ({ route }) => {
       console.error("Error fetching user data:", err);
       setUserError(err.message);
 
-      // Show user-friendly error message
       Alert.alert(
         "User Data Error",
         "Failed to load user profile. Some features may be limited.",
@@ -177,7 +183,6 @@ const HomeScreen = ({ route }) => {
         );
         return granted === PermissionsAndroid.RESULTS.GRANTED;
       } else {
-        // For iOS/Expo
         let { status } = await Location.requestForegroundPermissionsAsync();
         return status === "granted";
       }
@@ -193,7 +198,6 @@ const HomeScreen = ({ route }) => {
     setLocationError(null);
 
     try {
-      // Check if location services are enabled
       const locationServicesEnabled = await Location.hasServicesEnabledAsync();
       if (!locationServicesEnabled) {
         throw new Error(
@@ -201,7 +205,6 @@ const HomeScreen = ({ route }) => {
         );
       }
 
-      // Request permission
       const hasPermission = await requestLocationPermission();
       if (!hasPermission) {
         throw new Error("Location permission denied");
@@ -209,7 +212,6 @@ const HomeScreen = ({ route }) => {
 
       setLocationPermission("granted");
 
-      // Get current position
       const currentLocation = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
         timeout: 15000,
@@ -222,7 +224,6 @@ const HomeScreen = ({ route }) => {
         timestamp: currentLocation.timestamp,
       };
 
-      // Get address from coordinates
       try {
         const addressResponse = await Location.reverseGeocodeAsync({
           latitude: locationData.latitude,
@@ -239,7 +240,6 @@ const HomeScreen = ({ route }) => {
             street: address.street,
           };
 
-          // Set the selected location automatically if not manually set
           if (!isManualLocation && address.city) {
             const autoLocation = {
               id: "current",
@@ -263,7 +263,6 @@ const HomeScreen = ({ route }) => {
       setLocationError(err.message);
       setLocationPermission("denied");
 
-      // Show user-friendly error message
       Alert.alert("Location Error", err.message, [
         {
           text: "Retry",
@@ -277,7 +276,6 @@ const HomeScreen = ({ route }) => {
           text: "Skip",
           style: "cancel",
           onPress: () => {
-            // Continue without location
             fetchSalonData();
           },
         },
@@ -299,11 +297,7 @@ const HomeScreen = ({ route }) => {
   const handleLocationSelect = (locationData) => {
     setSelectedLocation(locationData);
     setIsManualLocation(locationData.id !== "current");
-
-    // If the selected location has coordinates, use them for distance calculation
     const locationCoords = locationData.coordinates || null;
-
-    // Fetch salons with the new location
     fetchSalonData(locationCoords, locationData.name);
   };
 
@@ -313,7 +307,6 @@ const HomeScreen = ({ route }) => {
     }
 
     return salonsData.filter((salon) => {
-      // Check if salon has salonType field and matches the filter
       return (
         salon.salonType &&
         salon.salonType.toLowerCase() === filterType.toLowerCase()
@@ -335,18 +328,15 @@ const HomeScreen = ({ route }) => {
 
   console.log("User", user);
 
-  // Fetch salon data from API (Updated version)
+  // Fetch salon data from API
   const fetchSalonData = async (userCoords = null, cityName = null) => {
     setLoading(true);
     setError(null);
 
     try {
-      // Construct API URL with id parameter if available
       let apiUrl =
         "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/shops/getShops";
-      const cityToSearch = cityName || selectedLocation?.name;
 
-      // If you want to add id parameter to API (when backend supports it)
       if (userId) {
         apiUrl += `?id=${userId}`;
       }
@@ -360,7 +350,6 @@ const HomeScreen = ({ route }) => {
       const data = await response.json();
       console.log("API Response:", data);
 
-      // Assuming the API returns an array of shops in data.shops or data
       let salonsData = Array.isArray(data.shops)
         ? data.shops
         : Array.isArray(data)
@@ -369,7 +358,6 @@ const HomeScreen = ({ route }) => {
 
       console.log("Raw salons data:", salonsData.length);
 
-      // If we have user coordinates, calculate distances and filter
       if (userCoords && userCoords.latitude && userCoords.longitude) {
         salonsData = salonsData.map((salon) => {
           if (salon.latitude && salon.longitude) {
@@ -384,7 +372,6 @@ const HomeScreen = ({ route }) => {
           return salon;
         });
 
-        // Sort by distance if we have coordinates
         salonsData.sort((a, b) => {
           if (a.distance && b.distance) {
             return a.distance - b.distance;
@@ -393,61 +380,84 @@ const HomeScreen = ({ route }) => {
         });
       }
 
-      // Filter by city if specified
-      if (cityToSearch) {
-        const cityFiltered = salonsData.filter((salon) => {
-          if (salon.city) {
-            return (
-              salon.city.toLowerCase().includes(cityToSearch.toLowerCase()) ||
-              cityToSearch.toLowerCase().includes(salon.city.toLowerCase())
-            );
-          }
-          return true; // Keep salons without city info
-        });
+      let cityToFilter = null;
 
-        if (cityFiltered.length > 0) {
-          salonsData = cityFiltered;
-        }
-        // If no city matches found, keep all salons (maybe the city name doesn't match exactly)
+      if (cityName) {
+        cityToFilter = cityName;
+      } else if (selectedLocation && selectedLocation.name) {
+        cityToFilter = selectedLocation.name.split(",")[0].trim();
+      } else if (location && location.address && location.address.city) {
+        cityToFilter = location.address.city;
       }
 
-      console.log("Processed salons data:", salonsData.length);
+      console.log("City to filter by:", cityToFilter);
 
-      // Store all salons
       setAllSalons(salonsData);
 
-      // Apply current filter to the salons
+      let cityFilteredSalons = salonsData;
+      if (cityToFilter) {
+        cityFilteredSalons = salonsData.filter((salon) => {
+          if (salon.city) {
+            const salonCity = salon.city.toLowerCase().trim();
+            const searchCity = cityToFilter.toLowerCase().trim();
+
+            return (
+              salonCity.includes(searchCity) ||
+              searchCity.includes(salonCity) ||
+              salonCity === searchCity
+            );
+          }
+          return false;
+        });
+
+        console.log(`Salons in ${cityToFilter}:`, cityFilteredSalons.length);
+
+        if (cityFilteredSalons.length === 0) {
+          setNearbySalons([]);
+
+          Alert.alert(
+            "No Salons Found",
+            `No salons currently available in ${cityToFilter}. Try changing your location to see available salons.`,
+            [
+              {
+                text: "Change Location",
+                onPress: openLocationSelection,
+              },
+              {
+                text: "Show All Salons",
+                onPress: () => {
+                  setSelectedLocation(null);
+                  setIsManualLocation(false);
+                  const filterOption = FILTER_OPTIONS.find(
+                    (option) => option.id === selectedFilter
+                  );
+                  const filteredSalons = applyFilter(
+                    salonsData,
+                    filterOption.value
+                  );
+                  setNearbySalons(filteredSalons);
+                },
+              },
+              {
+                text: "OK",
+                style: "cancel",
+              },
+            ]
+          );
+          return;
+        }
+      }
+
       const filterOption = FILTER_OPTIONS.find(
         (option) => option.id === selectedFilter
       );
-      const filteredSalons = applyFilter(salonsData, filterOption.value);
-      setNearbySalons(filteredSalons);
+      const finalFilteredSalons = applyFilter(
+        cityFilteredSalons,
+        filterOption.value
+      );
+      setNearbySalons(finalFilteredSalons);
 
-      // Check if no salons found
-      if (filteredSalons.length === 0) {
-        const alertMessage = cityToSearch
-          ? `No salons found in ${cityToSearch}. Would you like to search in a different location?`
-          : "No salons found in your area. Would you like to search in a specific location?";
-
-        Alert.alert("No Salons Found", alertMessage, [
-          {
-            text: "Search Different Location",
-            onPress: openLocationSelection,
-          },
-          {
-            text: "Show All Salons",
-            onPress: () => {
-              setSelectedLocation(null);
-              setIsManualLocation(false);
-              fetchSalonData(userCoords, null); // Fetch without city filter
-            },
-          },
-          {
-            text: "OK",
-            style: "cancel",
-          },
-        ]);
-      }
+      console.log("Final filtered salons:", finalFilteredSalons.length);
     } catch (err) {
       console.error("Error fetching salon data:", err);
       setError(err.message);
@@ -481,26 +491,22 @@ const HomeScreen = ({ route }) => {
           await fetchUserData(extractedShopId);
         }
 
-        // First, try to get location
         const userLocation = await getCurrentLocation();
-
-        // Then fetch salon data with or without location
         await fetchSalonData(userLocation);
       } catch (error) {
         console.error("Error initializing app:", error);
-        // If location fails completely, still try to fetch salon data
         await fetchSalonData();
       }
     };
 
     initializeApp();
-  }, []); // Empty dependency array - only run once
+  }, []);
 
   // Render category item
   const renderCategoryItem = ({ item }) => (
     <TouchableOpacity style={styles.categoryItem}>
       <View style={styles.categoryIconContainer}>
-        <FontAwesome5 name={item.icon} size={18} color="#fff" />
+        <FontAwesome5 name={item.icon} size={scale(18)} color="#fff" />
       </View>
       <Text style={styles.categoryName}>{item.name}</Text>
     </TouchableOpacity>
@@ -524,11 +530,11 @@ const HomeScreen = ({ route }) => {
           uri:
             item.images && item.images.length > 0
               ? item.images[0]
-              : "https://via.placeholder.com/160x100?text=Salon",
+              : "https://via.placeholder.com/120x80?text=Salon",
         }}
         style={styles.nearbyImage}
         defaultSource={{
-          uri: "https://via.placeholder.com/160x100?text=Salon",
+          uri: "https://via.placeholder.com/120x80?text=Salon",
         }}
       />
       <View style={styles.nearbyInfo}>
@@ -536,26 +542,25 @@ const HomeScreen = ({ route }) => {
           {item.shopName || "Salon Name"}
         </Text>
         <View style={styles.nearbyLocationRow}>
-          <Ionicons name="location-outline" size={12} color="#666" />
+          <Ionicons name="location-outline" size={scale(12)} color="#666" />
           <Text style={styles.nearbyLocation} numberOfLines={1}>
             {item.city && item.state
               ? `${item.city}, ${item.state}`
               : item.city || item.state || "Location"}
           </Text>
         </View>
-        <Text style={styles.nearbyAddress} numberOfLines={1}>
+        <Text style={styles.nearbyAddress} numberOfLines={2}>
           {item.address || "Address not available"}
         </Text>
         <View style={styles.nearbyBottomRow}>
           <View style={styles.nearbyRating}>
-            <Ionicons name="star" size={12} color="#FFD700" />
+            <Ionicons name="star" size={scale(12)} color="#FFD700" />
             <Text style={styles.nearbyRatingText}>{item.rating || "4.5"}</Text>
           </View>
           <Text style={styles.nearbyDistance}>
             {item.distance ? `${item.distance} km` : "~2.5 km"}
           </Text>
         </View>
-        {/* Show salon type badge */}
         {item.salonType && (
           <View style={styles.salonTypeBadge}>
             <Text style={styles.salonTypeText}>{item.salonType}</Text>
@@ -615,7 +620,11 @@ const HomeScreen = ({ route }) => {
             style={styles.locationRetryButton}
             onPress={getCurrentLocation}
           >
-            <Ionicons name="location-outline" size={16} color="#9370DB" />
+            <Ionicons
+              name="location-outline"
+              size={scale(16)}
+              color="#9370DB"
+            />
             <Text style={styles.locationRetryText}>Enable Location</Text>
           </TouchableOpacity>
           <TouchableOpacity
@@ -636,13 +645,13 @@ const HomeScreen = ({ route }) => {
         >
           <Ionicons
             name={isManualLocation ? "search" : "location"}
-            size={16}
+            size={scale(16)}
             color="#4CAF50"
           />
           <Text style={styles.locationStatusText} numberOfLines={1}>
             {selectedLocation.name}
           </Text>
-          <Ionicons name="pencil" size={12} color="#9370DB" />
+          <Ionicons name="pencil" size={scale(12)} color="#9370DB" />
         </TouchableOpacity>
       );
     }
@@ -652,7 +661,7 @@ const HomeScreen = ({ route }) => {
         style={styles.locationStatus}
         onPress={openLocationSelection}
       >
-        <Ionicons name="location-outline" size={16} color="#666" />
+        <Ionicons name="location-outline" size={scale(16)} color="#666" />
         <Text style={styles.locationStatusTextGray}>Select Location</Text>
       </TouchableOpacity>
     );
@@ -680,20 +689,24 @@ const HomeScreen = ({ route }) => {
             style={styles.filterButton}
             onPress={() => setShowFilterDropdown(!showFilterDropdown)}
           >
-            <Ionicons name="filter" size={20} color="#9370DB" />
+            <Ionicons name="filter" size={scale(20)} color="#9370DB" />
             <Text style={styles.filterButtonText}>
               {selectedFilterOption?.name}
             </Text>
             <Ionicons
               name={showFilterDropdown ? "chevron-up" : "chevron-down"}
-              size={16}
+              size={scale(16)}
               color="#9370DB"
             />
           </TouchableOpacity>
 
           {/* Notification Button */}
           <TouchableOpacity style={styles.notificationButton}>
-            <Ionicons name="notifications-outline" size={24} color="black" />
+            <Ionicons
+              name="notifications-outline"
+              size={scale(24)}
+              color="black"
+            />
           </TouchableOpacity>
         </View>
       </View>
@@ -720,7 +733,7 @@ const HomeScreen = ({ route }) => {
                 {option.name}
               </Text>
               {selectedFilter === option.id && (
-                <Ionicons name="checkmark" size={16} color="#9370DB" />
+                <Ionicons name="checkmark" size={scale(16)} color="#9370DB" />
               )}
             </TouchableOpacity>
           ))}
@@ -735,7 +748,7 @@ const HomeScreen = ({ route }) => {
         >
           <Ionicons
             name="search"
-            size={20}
+            size={scale(20)}
             color="#999"
             style={styles.searchIcon}
           />
@@ -744,7 +757,7 @@ const HomeScreen = ({ route }) => {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.searchFilterButton}>
-          <Ionicons name="options-outline" size={20} color="#000" />
+          <Ionicons name="options-outline" size={scale(20)} color="#000" />
         </TouchableOpacity>
       </View>
 
@@ -752,9 +765,10 @@ const HomeScreen = ({ route }) => {
       <ScrollView
         showsVerticalScrollIndicator={false}
         style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
       >
         {/* Categories Section */}
-        <View style={styles.categoriesContainer}>
+        {/* <View style={styles.categoriesContainer}>
           <FlatList
             data={CATEGORIES}
             renderItem={renderCategoryItem}
@@ -762,21 +776,6 @@ const HomeScreen = ({ route }) => {
             horizontal
             showsHorizontalScrollIndicator={false}
           />
-        </View>
-
-        {/* Special Offers Section */}
-        {/* <View style={styles.sectionContainer}>
-          <Text style={styles.sectionTitle}>Special Offers</Text>
-          <View style={styles.offerCard}>
-            <View style={styles.offerContent}>
-              <Text style={styles.offerTitle}>Haircut</Text>
-              <Text style={styles.offerDiscount}>20% Off</Text>
-              <Text style={styles.offerPeriod}>Till 30 - Jul - 21</Text>
-              <TouchableOpacity style={styles.offerButton}>
-                <Text style={styles.offerButtonText}>Get Offer Now</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
         </View> */}
 
         {/* Nearby Salons Section */}
@@ -807,8 +806,13 @@ const HomeScreen = ({ route }) => {
               data={nearbySalons}
               renderItem={renderNearbyCard}
               keyExtractor={(item) => item._id || item.id}
-              horizontal
-              showsHorizontalScrollIndicator={false}
+              numColumns={deviceType.isTablet ? 3 : 2}
+              key={deviceType.isTablet ? "tablet" : "phone"} // Force re-render on device type change
+              columnWrapperStyle={
+                deviceType.isTablet ? styles.salonRowTablet : styles.salonRow
+              }
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={false}
               contentContainerStyle={styles.salonsList}
             />
           ) : (
@@ -855,18 +859,18 @@ const HomeScreen = ({ route }) => {
       {/* Bottom Tab Bar */}
       <View style={styles.bottomTabBar}>
         <TouchableOpacity style={[styles.tabItem, styles.activeTab]}>
-          <Ionicons name="home" size={22} color="#9370DB" />
+          <Ionicons name="home" size={scale(22)} color="#9370DB" />
           <Text style={styles.activeTabText}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.tabItem}
           onPress={() => navigation.navigate("Favourite")}
         >
-          <Ionicons name="heart-outline" size={22} color="#999" />
+          <Ionicons name="heart-outline" size={scale(22)} color="#999" />
           <Text style={styles.tabText}>Favorite</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.tabItem}>
-          <Ionicons name="chatbubble-outline" size={22} color="#999" />
+          <Ionicons name="chatbubble-outline" size={scale(22)} color="#999" />
           <Text style={styles.tabText}>Message</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -878,7 +882,7 @@ const HomeScreen = ({ route }) => {
             })
           }
         >
-          <Ionicons name="person-outline" size={22} color="#999" />
+          <Ionicons name="person-outline" size={scale(22)} color="#999" />
           <Text style={styles.tabText}>Profile</Text>
         </TouchableOpacity>
       </View>
@@ -897,66 +901,78 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    paddingHorizontal: wp(5),
+    paddingHorizontal: spacing.headerPadding,
     paddingTop:
-      Platform.OS === "android" ? verticalScale(15) : verticalScale(10),
-    paddingBottom: verticalScale(10),
+      Platform.OS === "android"
+        ? verticalScale(15) + safeArea.top
+        : verticalScale(10) + safeArea.top,
+    paddingBottom: verticalScale(15),
+    minHeight: getHeaderHeight(),
   },
   headerLeft: {
     flex: 1,
-    maxWidth: wp(65),
+    maxWidth: wp(deviceType.isTablet ? 75 : 65),
+    justifyContent: "flex-start",
   },
   headerRight: {
     flexDirection: "row",
     alignItems: "center",
+    minWidth: wp(deviceType.isTablet ? 20 : 30),
   },
   greetingText: {
-    fontSize: font(14),
+    fontSize: font(deviceType.isSmallDevice ? 13 : 14),
     color: "#999",
-    lineHeight: font(18),
+    lineHeight: font(deviceType.isSmallDevice ? 16 : 18),
   },
   welcomeText: {
-    fontSize: font(20),
+    fontSize: font(
+      deviceType.isSmallDevice ? 18 : deviceType.isTablet ? 24 : 20
+    ),
     fontWeight: "bold",
     color: "#000",
-    lineHeight: font(24),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 22 : deviceType.isTablet ? 28 : 24
+    ),
     marginTop: verticalScale(2),
   },
 
-  // Filter Button Styles
+  // Enhanced Filter Button Styles
   filterButton: {
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: "#F0F0F0",
-    paddingVertical: verticalScale(8),
-    paddingHorizontal: scale(12),
-    borderRadius: borderRadius.lg,
-    marginRight: scale(10),
+    paddingVertical: verticalScale(deviceType.isSmallDevice ? 6 : 8),
+    paddingHorizontal: scale(deviceType.isSmallDevice ? 8 : 12),
+    borderRadius: borderRadius.button,
+    marginRight: scale(deviceType.isSmallDevice ? 6 : 10),
     borderWidth: 1,
     borderColor: "#9370DB",
-    minHeight: verticalScale(36),
+    minHeight: getButtonHeight() * 0.8,
+    maxWidth: wp(25),
   },
   filterButtonText: {
-    fontSize: font(12),
+    fontSize: font(deviceType.isSmallDevice ? 11 : 12),
     color: "#9370DB",
     fontWeight: "500",
     marginHorizontal: scale(4),
+    lineHeight: font(deviceType.isSmallDevice ? 14 : 16),
   },
 
-  // Filter Dropdown Styles
+  // Enhanced Filter Dropdown Styles
   filterDropdown: {
     position: "absolute",
-    top: Platform.OS === "android" ? verticalScale(95) : verticalScale(90),
-    right: wp(5),
+    top: getHeaderHeight() + verticalScale(10),
+    right: spacing.headerPadding,
     backgroundColor: "#fff",
     borderRadius: borderRadius.lg,
     paddingVertical: verticalScale(8),
     minWidth: scale(120),
+    maxWidth: wp(40),
     shadowColor: "#000",
     shadowOpacity: 0.1,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
-    elevation: 8, // Increased for Android
+    elevation: 8,
     zIndex: 1000,
   },
   filterOption: {
@@ -974,46 +990,48 @@ const styles = StyleSheet.create({
     fontSize: font(14),
     color: "#333",
     lineHeight: font(18),
+    flex: 1,
   },
   selectedFilterOptionText: {
     color: "#9370DB",
     fontWeight: "600",
   },
   filterIndicator: {
-    fontSize: font(14),
+    fontSize: font(deviceType.isSmallDevice ? 12 : 14),
     color: "#9370DB",
     fontWeight: "normal",
   },
   notificationButton: {
-    width: scale(40),
-    height: scale(40),
-    borderRadius: scale(20),
+    width: scale(deviceType.isSmallDevice ? 36 : 40),
+    height: scale(deviceType.isSmallDevice ? 36 : 40),
+    borderRadius: scale(deviceType.isSmallDevice ? 18 : 20),
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F0F0F0",
   },
 
-  // Location status styles
+  // Enhanced Location status styles
   locationStatus: {
     flexDirection: "row",
     alignItems: "center",
-    marginTop: verticalScale(4),
-    maxWidth: wp(55),
+    marginTop: verticalScale(6),
+    maxWidth: wp(deviceType.isTablet ? 60 : 55),
     minHeight: verticalScale(20),
+    flexWrap: deviceType.isSmallDevice ? "wrap" : "nowrap",
   },
   locationStatusText: {
-    fontSize: font(12),
+    fontSize: font(deviceType.isSmallDevice ? 11 : 12),
     color: "#4CAF50",
     marginLeft: scale(4),
     marginRight: scale(4),
     flex: 1,
-    lineHeight: font(16),
+    lineHeight: font(deviceType.isSmallDevice ? 14 : 16),
   },
   locationStatusTextGray: {
-    fontSize: font(12),
+    fontSize: font(deviceType.isSmallDevice ? 11 : 12),
     color: "#666",
     marginLeft: scale(4),
-    lineHeight: font(16),
+    lineHeight: font(deviceType.isSmallDevice ? 14 : 16),
   },
   locationRetryButton: {
     flexDirection: "row",
@@ -1021,37 +1039,40 @@ const styles = StyleSheet.create({
     paddingHorizontal: scale(8),
     paddingVertical: verticalScale(4),
     backgroundColor: "#f0f0f0",
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.button,
     minHeight: verticalScale(28),
+    marginBottom: deviceType.isSmallDevice ? verticalScale(4) : 0,
   },
   locationRetryText: {
-    fontSize: font(12),
+    fontSize: font(deviceType.isSmallDevice ? 11 : 12),
     color: "#9370DB",
     marginLeft: scale(4),
     fontWeight: "500",
-    lineHeight: font(16),
+    lineHeight: font(deviceType.isSmallDevice ? 14 : 16),
   },
   manualLocationButton: {
-    marginLeft: scale(8),
+    marginLeft: deviceType.isSmallDevice ? 0 : scale(8),
+    marginTop: deviceType.isSmallDevice ? verticalScale(4) : 0,
     paddingHorizontal: scale(8),
     paddingVertical: verticalScale(4),
     backgroundColor: "#f8f8f8",
-    borderRadius: borderRadius.lg,
+    borderRadius: borderRadius.button,
     minHeight: verticalScale(28),
   },
   manualLocationText: {
-    fontSize: font(12),
+    fontSize: font(deviceType.isSmallDevice ? 11 : 12),
     color: "#9370DB",
     fontWeight: "500",
-    lineHeight: font(16),
+    lineHeight: font(deviceType.isSmallDevice ? 14 : 16),
   },
 
-  // Search container
+  // Enhanced Search container
   searchContainer: {
     flexDirection: "row",
-    paddingHorizontal: wp(5),
-    marginTop: verticalScale(15),
+    paddingHorizontal: spacing.headerPadding,
+    marginTop: verticalScale(deviceType.isSmallDevice ? 12 : 15),
     alignItems: "center",
+    marginBottom: verticalScale(5),
   },
   searchBar: {
     flex: 1,
@@ -1059,22 +1080,22 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: "#F0F0F0",
     borderRadius: borderRadius.md,
-    paddingHorizontal: scale(10),
-    height: verticalScale(40),
-    minHeight: verticalScale(40),
+    paddingHorizontal: spacing.sm,
+    height: getButtonHeight(),
+    minHeight: getButtonHeight(),
   },
   searchIcon: {
     marginRight: scale(8),
   },
   searchPlaceholder: {
     flex: 1,
-    fontSize: font(14),
+    fontSize: font(deviceType.isSmallDevice ? 13 : 14),
     color: "#999",
-    lineHeight: font(18),
+    lineHeight: font(deviceType.isSmallDevice ? 16 : 18),
   },
   searchFilterButton: {
-    width: scale(40),
-    height: verticalScale(40),
+    width: getButtonHeight(),
+    height: getButtonHeight(),
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "#F0F0F0",
@@ -1082,40 +1103,48 @@ const styles = StyleSheet.create({
     marginLeft: scale(10),
   },
 
-  // ScrollView
+  // Enhanced ScrollView
   scrollView: {
     flex: 1,
-    paddingHorizontal: wp(5),
+  },
+  scrollContent: {
+    paddingHorizontal: spacing.headerPadding,
+    paddingBottom: verticalScale(20),
   },
 
-  // Categories
+  // Enhanced Categories
   categoriesContainer: {
-    marginTop: verticalScale(20),
+    marginTop: spacing.sectionMargin,
     marginBottom: verticalScale(10),
   },
   categoryItem: {
     alignItems: "center",
-    marginRight: scale(20),
+    marginRight: scale(deviceType.isSmallDevice ? 15 : 20),
+    minWidth: scale(60),
   },
   categoryIconContainer: {
-    width: scale(50),
-    height: scale(50),
-    borderRadius: scale(25),
+    width: scale(deviceType.isSmallDevice ? 45 : deviceType.isTablet ? 60 : 50),
+    height: scale(
+      deviceType.isSmallDevice ? 45 : deviceType.isTablet ? 60 : 50
+    ),
+    borderRadius: scale(
+      deviceType.isSmallDevice ? 22.5 : deviceType.isTablet ? 30 : 25
+    ),
     backgroundColor: "#9370DB",
     justifyContent: "center",
     alignItems: "center",
   },
   categoryName: {
-    marginTop: verticalScale(5),
-    fontSize: font(12),
+    marginTop: verticalScale(6),
+    fontSize: font(deviceType.isSmallDevice ? 11 : 12),
     color: "#333",
     textAlign: "center",
-    lineHeight: font(16),
+    lineHeight: font(deviceType.isSmallDevice ? 14 : 16),
   },
 
-  // Sections
+  // Enhanced Sections
   sectionContainer: {
-    marginTop: verticalScale(25),
+    marginTop: spacing.sectionMargin,
   },
   sectionHeader: {
     flexDirection: "row",
@@ -1125,102 +1154,73 @@ const styles = StyleSheet.create({
     minHeight: verticalScale(24),
   },
   sectionTitle: {
-    fontSize: font(18),
+    fontSize: font(
+      deviceType.isSmallDevice ? 16 : deviceType.isTablet ? 20 : 18
+    ),
     fontWeight: "bold",
     color: "#000",
     flex: 1,
-    lineHeight: font(22),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 20 : deviceType.isTablet ? 24 : 22
+    ),
   },
   seeAllText: {
-    fontSize: font(14),
+    fontSize: font(deviceType.isSmallDevice ? 13 : 14),
     color: "#9370DB",
     fontWeight: "500",
-    lineHeight: font(18),
+    lineHeight: font(deviceType.isSmallDevice ? 16 : 18),
   },
 
-  // Offer card
-  offerCard: {
-    backgroundColor: "#9370DB",
-    borderRadius: borderRadius.lg,
-    flexDirection: "row",
-    overflow: "hidden",
-    height: verticalScale(120),
-    minHeight: verticalScale(100),
-  },
-  offerContent: {
-    flex: 1,
-    padding: spacing.md,
-    justifyContent: "center",
-  },
-  offerTitle: {
-    fontSize: font(16),
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: verticalScale(3),
-    lineHeight: font(20),
-  },
-  offerDiscount: {
-    fontSize: font(22),
-    fontWeight: "bold",
-    color: "#fff",
-    marginBottom: verticalScale(3),
-    lineHeight: font(26),
-  },
-  offerPeriod: {
-    fontSize: font(12),
-    color: "#fff",
-    opacity: 0.8,
-    marginBottom: verticalScale(8),
-    lineHeight: font(16),
-  },
-  offerButton: {
-    backgroundColor: "#fff",
-    paddingVertical: verticalScale(6),
-    paddingHorizontal: scale(12),
-    borderRadius: borderRadius.lg,
-    alignSelf: "flex-start",
-    minHeight: verticalScale(28),
-    justifyContent: "center",
-  },
-  offerButtonText: {
-    color: "#9370DB",
-    fontWeight: "bold",
-    fontSize: font(12),
-    lineHeight: font(16),
-  },
-
-  // Salon list
+  // Enhanced Salon list styles
   salonsList: {
-    paddingRight: scale(20),
+    paddingBottom: verticalScale(20),
+  },
+  salonRow: {
+    justifyContent: "space-between",
+    marginBottom: verticalScale(15),
+  },
+  salonRowTablet: {
+    justifyContent: "space-between",
+    marginBottom: verticalScale(20),
   },
 
-  // Nearby Salon Card Styles
+  // Enhanced Nearby Salon Card Styles
   nearbyCard: {
     backgroundColor: "#fff",
-    borderRadius: borderRadius.lg,
-    marginRight: scale(15),
-    width: scale(160),
+    borderRadius: borderRadius.card,
+    width: getCardWidth(deviceType.isTablet ? 3 : 2, spacing.headerPadding / 2),
     shadowColor: "#000",
     shadowOpacity: 0.08,
     shadowOffset: { width: 0, height: 2 },
     shadowRadius: 8,
     elevation: 4,
     overflow: "hidden",
+    minHeight: verticalScale(
+      deviceType.isSmallDevice ? 220 : deviceType.isTablet ? 280 : 250
+    ),
   },
   nearbyImage: {
     width: "100%",
-    height: verticalScale(100),
+    height: verticalScale(
+      deviceType.isSmallDevice ? 100 : deviceType.isTablet ? 140 : 120
+    ),
     backgroundColor: "#f0f0f0",
   },
   nearbyInfo: {
-    padding: spacing.sm,
+    padding: spacing.cardPadding,
+    flex: 1,
+    justifyContent: "space-between",
   },
   nearbyName: {
-    fontSize: font(14),
+    fontSize: font(
+      deviceType.isSmallDevice ? 13 : deviceType.isTablet ? 16 : 14
+    ),
     fontWeight: "600",
     color: "#333",
     marginBottom: verticalScale(4),
-    lineHeight: font(18),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 16 : deviceType.isTablet ? 20 : 18
+    ),
   },
   nearbyLocationRow: {
     flexDirection: "row",
@@ -1229,23 +1229,32 @@ const styles = StyleSheet.create({
     minHeight: verticalScale(16),
   },
   nearbyLocation: {
-    fontSize: font(11),
+    fontSize: font(
+      deviceType.isSmallDevice ? 10 : deviceType.isTablet ? 13 : 11
+    ),
     color: "#666",
     marginLeft: scale(3),
     flex: 1,
-    lineHeight: font(15),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 13 : deviceType.isTablet ? 16 : 15
+    ),
   },
   nearbyAddress: {
-    fontSize: font(10),
+    fontSize: font(
+      deviceType.isSmallDevice ? 9 : deviceType.isTablet ? 12 : 10
+    ),
     color: "#999",
     marginBottom: verticalScale(8),
-    lineHeight: font(14),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 12 : deviceType.isTablet ? 15 : 14
+    ),
   },
   nearbyBottomRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     minHeight: verticalScale(20),
+    marginBottom: verticalScale(4),
   },
   nearbyRating: {
     flexDirection: "row",
@@ -1253,42 +1262,52 @@ const styles = StyleSheet.create({
     backgroundColor: "#f8f8f8",
     paddingHorizontal: scale(6),
     paddingVertical: verticalScale(2),
-    borderRadius: borderRadius.sm,
+    borderRadius: borderRadius.xs,
     minHeight: verticalScale(20),
   },
   nearbyRatingText: {
-    fontSize: font(11),
+    fontSize: font(
+      deviceType.isSmallDevice ? 10 : deviceType.isTablet ? 13 : 11
+    ),
     color: "#333",
     marginLeft: scale(2),
     fontWeight: "500",
-    lineHeight: font(15),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 13 : deviceType.isTablet ? 16 : 15
+    ),
   },
   nearbyDistance: {
-    fontSize: font(10),
+    fontSize: font(
+      deviceType.isSmallDevice ? 9 : deviceType.isTablet ? 12 : 10
+    ),
     color: "#9370DB",
     fontWeight: "500",
-    lineHeight: font(14),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 12 : deviceType.isTablet ? 15 : 14
+    ),
   },
 
-  // Salon Type Badge
+  // Enhanced Salon Type Badge
   salonTypeBadge: {
     backgroundColor: "#9370DB",
     paddingHorizontal: scale(6),
     paddingVertical: verticalScale(2),
-    borderRadius: borderRadius.sm,
+    borderRadius: borderRadius.xs,
     alignSelf: "flex-start",
     marginTop: verticalScale(6),
     minHeight: verticalScale(16),
     justifyContent: "center",
   },
   salonTypeText: {
-    fontSize: font(9),
+    fontSize: font(deviceType.isSmallDevice ? 8 : deviceType.isTablet ? 11 : 9),
     color: "#fff",
     fontWeight: "600",
-    lineHeight: font(12),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 10 : deviceType.isTablet ? 13 : 12
+    ),
   },
 
-  // Loading and error states
+  // Enhanced Loading and error states
   loadingContainer: {
     flexDirection: "row",
     alignItems: "center",
@@ -1313,13 +1332,14 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(15),
     textAlign: "center",
     lineHeight: font(20),
+    paddingHorizontal: spacing.sm,
   },
   retryButton: {
     backgroundColor: "#9370DB",
     paddingHorizontal: scale(20),
     paddingVertical: verticalScale(10),
-    borderRadius: borderRadius.sm,
-    minHeight: verticalScale(40),
+    borderRadius: borderRadius.button,
+    minHeight: getButtonHeight(),
     justifyContent: "center",
   },
   retryButtonText: {
@@ -1339,14 +1359,15 @@ const styles = StyleSheet.create({
     marginBottom: verticalScale(15),
     textAlign: "center",
     lineHeight: font(20),
+    paddingHorizontal: spacing.sm,
   },
   refreshButton: {
     backgroundColor: "#f0f0f0",
     paddingHorizontal: scale(20),
     paddingVertical: verticalScale(10),
-    borderRadius: borderRadius.sm,
+    borderRadius: borderRadius.button,
     marginTop: verticalScale(10),
-    minHeight: verticalScale(40),
+    minHeight: getButtonHeight(),
     justifyContent: "center",
   },
   refreshButtonText: {
@@ -1359,9 +1380,9 @@ const styles = StyleSheet.create({
     backgroundColor: "#9370DB",
     paddingHorizontal: scale(20),
     paddingVertical: verticalScale(10),
-    borderRadius: borderRadius.sm,
+    borderRadius: borderRadius.button,
     marginBottom: verticalScale(10),
-    minHeight: verticalScale(40),
+    minHeight: getButtonHeight(),
     justifyContent: "center",
   },
   searchCityButtonText: {
@@ -1371,36 +1392,52 @@ const styles = StyleSheet.create({
     lineHeight: font(18),
   },
 
-  // Bottom Tab Bar
+  // Enhanced Bottom Tab Bar
   bottomTabBar: {
     flexDirection: "row",
     justifyContent: "space-around",
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     borderColor: "#eee",
     backgroundColor: "#fff",
-    paddingVertical: verticalScale(10),
+    paddingVertical: verticalScale(deviceType.isSmallDevice ? 8 : 10),
     paddingBottom:
-      Platform.OS === "android" ? verticalScale(10) : verticalScale(15),
-    minHeight: verticalScale(60),
+      Platform.OS === "android"
+        ? verticalScale(deviceType.isSmallDevice ? 8 : 10)
+        : verticalScale(deviceType.isSmallDevice ? 12 : 15) + safeArea.bottom,
+    minHeight:
+      verticalScale(
+        deviceType.isSmallDevice ? 55 : deviceType.isTablet ? 70 : 60
+      ) + safeArea.bottom,
   },
   tabItem: {
     alignItems: "center",
     justifyContent: "center",
     flex: 1,
+    paddingHorizontal: scale(4),
   },
   activeTab: {
     borderTopColor: "#9370DB",
   },
   tabText: {
-    fontSize: font(10),
+    fontSize: font(
+      deviceType.isSmallDevice ? 9 : deviceType.isTablet ? 12 : 10
+    ),
     color: "#999",
     marginTop: verticalScale(3),
-    lineHeight: font(12),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 11 : deviceType.isTablet ? 14 : 12
+    ),
+    textAlign: "center",
   },
   activeTabText: {
-    fontSize: font(10),
+    fontSize: font(
+      deviceType.isSmallDevice ? 9 : deviceType.isTablet ? 12 : 10
+    ),
     color: "#9370DB",
     marginTop: verticalScale(3),
-    lineHeight: font(12),
+    lineHeight: font(
+      deviceType.isSmallDevice ? 11 : deviceType.isTablet ? 14 : 12
+    ),
+    textAlign: "center",
   },
 });

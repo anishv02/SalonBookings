@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -9,9 +9,12 @@ import {
   Dimensions,
   Animated,
   Platform,
+  Alert,
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
-import { useNavigation } from "@react-navigation/native";
+import { useNavigation, useRoute } from "@react-navigation/native";
+import { jwtDecode } from "jwt-decode";
+import { getToken } from "../../utils/authStorage";
 import {
   scale,
   verticalScale,
@@ -26,10 +29,24 @@ const font = (size) =>
     ? responsiveFontSize(size * 0.92)
     : responsiveFontSize(size);
 
-const SeatsView = ({ onSeatSelect = () => {} }) => {
+// Simplified SeatsView - just show seat numbers, click to see bookings
+const SeatsView = ({ onSeatSelect = () => {}, seatCount }) => {
   const navigation = useNavigation();
+  const route = useRoute();
+
+  // prefer explicit prop, then route param (from DashboardScreen), then default 8
+  const finalSeatCount = Number(seatCount ?? route?.params?.seatCount ?? 8);
+
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
+  const [seatsState, setSeatsState] = useState(() =>
+    generateSeats(finalSeatCount)
+  );
+
+  useEffect(() => {
+    // regenerate seats when seat count changes
+    setSeatsState(generateSeats(finalSeatCount));
+  }, [finalSeatCount]);
 
   // Generate calendar dates for current month
   const generateCalendarDates = () => {
@@ -37,7 +54,6 @@ const SeatsView = ({ onSeatSelect = () => {} }) => {
     const currentMonth = currentDate.getMonth();
     const currentYear = currentDate.getFullYear();
     const firstDay = new Date(currentYear, currentMonth, 1);
-    const lastDay = new Date(currentYear, currentMonth + 1, 0);
     const startDate = new Date(firstDay);
     startDate.setDate(startDate.getDate() - firstDay.getDay());
 
@@ -67,82 +83,26 @@ const SeatsView = ({ onSeatSelect = () => {} }) => {
   ];
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  // Updated sample data for seats - removed stylist names
-  const seats = [
-    {
-      id: 1,
-      number: "S01",
-      isOccupied: true,
-      customer: "Alice Johnson",
-      startTime: "1:00 PM",
-      endTime: "2:30 PM",
-      services: ["Haircut", "Color"],
-    },
-    {
-      id: 2,
-      number: "S02",
-      isOccupied: false,
-      startTime: null,
-      endTime: null,
-      services: [],
-    },
-    {
-      id: 3,
-      number: "S03",
-      isOccupied: true,
-      customer: "Sarah Wilson",
-      startTime: "2:00 PM",
-      endTime: "4:00 PM",
-      services: ["Styling", "Treatment"],
-    },
-    {
-      id: 4,
-      number: "S04",
-      isOccupied: false,
-      startTime: null,
-      endTime: null,
-      services: [],
-    },
-    {
-      id: 5,
-      number: "S05",
-      isOccupied: true,
-      customer: "Emma Davis",
-      startTime: "12:30 PM",
-      endTime: "3:15 PM",
-      services: ["Haircut", "Wash"],
-    },
-    {
-      id: 6,
-      number: "S06",
-      isOccupied: false,
-      startTime: null,
-      endTime: null,
-      services: [],
-    },
-    {
-      id: 7,
-      number: "S07",
-      isOccupied: true,
-      customer: "Lisa Brown",
-      startTime: "3:00 PM",
-      endTime: "5:00 PM",
-      services: ["Color", "Styling"],
-    },
-    {
-      id: 8,
-      number: "S08",
-      isOccupied: false,
-      startTime: null,
-      endTime: null,
-      services: [],
-    },
-  ];
+  // generate simple seats array based on finalSeatCount
+  function generateSeats(count) {
+    const arr = [];
+    for (let i = 1; i <= count; i++) {
+      arr.push({
+        id: i,
+        number: `S${String(i).padStart(2, "0")}`,
+      });
+    }
+    return arr;
+  }
 
   const handleSeatClick = (seat) => {
-    console.log("Selected Seat:", seat);
     onSeatSelect(seat);
-    navigation.navigate("CustomersView", { selectedSeat: seat.id });
+    // Navigate to bookings list for this seat and selected date
+    navigation.navigate("CustomersView", {
+      selectedSeat: seat.id,
+      selectedDate: selectedDate,
+      seatNumber: seat.number,
+    });
   };
 
   const handleDateSelect = (date) => {
@@ -164,13 +124,10 @@ const SeatsView = ({ onSeatSelect = () => {} }) => {
     return date.getMonth() === currentMonth;
   };
 
-  const occupiedSeats = seats.filter((seat) => seat.isOccupied).length;
-  const availableSeats = seats.filter((seat) => !seat.isOccupied).length;
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
-        {/* Enhanced Header */}
+        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => navigation.navigate("SalonDashboard")}
@@ -181,7 +138,7 @@ const SeatsView = ({ onSeatSelect = () => {} }) => {
           <View style={styles.headerText}>
             <Text style={styles.headerTitle}>Seats Management</Text>
             <Text style={styles.headerSubtitle}>
-              Track seat occupancy and customer services
+              Select a seat to view bookings
             </Text>
           </View>
           <TouchableOpacity style={styles.notificationButton}>
@@ -189,42 +146,20 @@ const SeatsView = ({ onSeatSelect = () => {} }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Stats Cards */}
+        {/* Total Seats Info */}
         <View style={styles.statsContainer}>
-          <View style={styles.statCard}>
-            <View
-              style={[styles.statIconContainer, { backgroundColor: "#dcfce7" }]}
-            >
-              <Icon name="event-seat" size={24} color="#16a34a" />
-            </View>
-            <View style={styles.statTextContainer}>
-              <Text style={styles.statNumber}>{availableSeats}</Text>
-              <Text style={styles.statLabel}>Available</Text>
-            </View>
-          </View>
-          <View style={styles.statCard}>
-            <View
-              style={[styles.statIconContainer, { backgroundColor: "#fee2e2" }]}
-            >
-              <Icon name="people" size={24} color="#dc2626" />
-            </View>
-            <View style={styles.statTextContainer}>
-              <Text style={styles.statNumber}>{occupiedSeats}</Text>
-              <Text style={styles.statLabel}>Occupied</Text>
-            </View>
-          </View>
           <View style={styles.statCard}>
             <View style={styles.statIconContainer}>
               <Icon name="grid-view" size={24} color="#3b82f6" />
             </View>
             <View style={styles.statTextContainer}>
-              <Text style={styles.statNumber}>{seats.length}</Text>
+              <Text style={styles.statNumber}>{seatsState.length}</Text>
               <Text style={styles.statLabel}>Total Seats</Text>
             </View>
           </View>
         </View>
 
-        {/* Beautiful Date Picker */}
+        {/* Date Picker */}
         <View style={styles.dateSection}>
           <TouchableOpacity
             onPress={() => setShowCalendar(!showCalendar)}
@@ -297,120 +232,24 @@ const SeatsView = ({ onSeatSelect = () => {} }) => {
           )}
         </View>
 
-        {/* Enhanced Seats Grid */}
+        {/* Simplified Seats Grid */}
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.seatsGrid}>
-            {seats.map((seat) => (
+            {seatsState.map((seat) => (
               <TouchableOpacity
                 key={seat.id}
                 onPress={() => handleSeatClick(seat)}
-                style={[
-                  styles.seatTile,
-                  seat.isOccupied ? styles.occupiedSeat : styles.availableSeat,
-                ]}
+                style={styles.seatTile}
               >
                 <View style={styles.seatContent}>
-                  {/* Seat Header */}
-                  <View style={styles.seatHeader}>
-                    <View
-                      style={[
-                        styles.seatNumber,
-                        {
-                          backgroundColor: seat.isOccupied
-                            ? "#dc2626"
-                            : "#16a34a",
-                        },
-                      ]}
-                    >
-                      <Text style={styles.seatNumberText}>{seat.number}</Text>
-                    </View>
-                    <View
-                      style={[
-                        styles.statusIndicator,
-                        {
-                          backgroundColor: seat.isOccupied
-                            ? "#dc2626"
-                            : "#16a34a",
-                        },
-                      ]}
-                    />
+                  <View style={styles.seatIconContainer}>
+                    <Icon name="event-seat" size={32} color="#9370DB" />
                   </View>
-
-                  {/* Customer Info (if occupied) */}
-                  {seat.isOccupied && seat.customer && (
-                    <View style={styles.customerInfo}>
-                      <Icon name="person" size={18} color="#1f2937" />
-                      <Text style={styles.customerName}>{seat.customer}</Text>
-                    </View>
-                  )}
-
-                  {/* Time Info (if occupied) */}
-                  {seat.isOccupied && seat.startTime && seat.endTime && (
-                    <View style={styles.timeInfo}>
-                      <Icon name="schedule" size={16} color="#6b7280" />
-                      <Text style={styles.timeText}>
-                        {seat.startTime} - {seat.endTime}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Services (if occupied) */}
-                  {seat.isOccupied && seat.services.length > 0 && (
-                    <View style={styles.servicesContainer}>
-                      {seat.services.slice(0, 2).map((service, index) => (
-                        <View key={index} style={styles.serviceTag}>
-                          <Text style={styles.serviceText}>{service}</Text>
-                        </View>
-                      ))}
-                      {seat.services.length > 2 && (
-                        <View style={styles.serviceTag}>
-                          <Text style={styles.serviceText}>
-                            +{seat.services.length - 2}
-                          </Text>
-                        </View>
-                      )}
-                    </View>
-                  )}
-
-                  {/* Upcoming entry for available seats */}
-                  {!seat.isOccupied && seat.upcoming && (
-                    <View style={{ marginTop: 8 }}>
-                      <Text style={{ fontWeight: "bold", color: "#9370DB" }}>
-                        Upcoming Booking
-                      </Text>
-                      <Text style={{ color: "#1f2937", marginTop: 2 }}>
-                        Name: {seat.upcoming.name}
-                      </Text>
-                      <Text style={{ color: "#6b7280", marginTop: 2 }}>
-                        Time: {seat.upcoming.time}
-                      </Text>
-                      <Text style={{ color: "#6b7280", marginTop: 2 }}>
-                        Services: {seat.upcoming.services.join(", ")}
-                      </Text>
-                    </View>
-                  )}
-
-                  {/* Status */}
-                  <View
-                    style={[
-                      styles.statusContainer,
-                      seat.isOccupied
-                        ? styles.occupiedStatus
-                        : styles.availableStatus,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.statusText,
-                        { color: seat.isOccupied ? "#dc2626" : "#16a34a" },
-                      ]}
-                    >
-                      {seat.isOccupied ? "Occupied" : "Available"}
-                    </Text>
-                  </View>
+                  <Text style={styles.seatNumber}>{seat.number}</Text>
+                  <Text style={styles.seatLabel}>Tap to view bookings</Text>
                 </View>
               </TouchableOpacity>
             ))}
@@ -471,10 +310,10 @@ const styles = StyleSheet.create({
     borderRadius: scale(8),
   },
 
-  // Stats Cards
+  // Stats Cards - simplified to show only total seats
   statsContainer: {
     flexDirection: "row",
-    justifyContent: "space-between",
+    justifyContent: "center",
     paddingHorizontal: moderateScale(20),
     paddingVertical: verticalScale(20),
   },
@@ -482,8 +321,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderRadius: scale(16),
     padding: moderateScale(16),
-    flex: 1,
-    marginHorizontal: scale(4),
     flexDirection: "row",
     alignItems: "center",
     shadowColor: "#000",
@@ -491,12 +328,13 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: scale(4),
     elevation: 3,
+    minWidth: scale(150),
   },
   statIconContainer: {
     width: scale(40),
     height: scale(40),
     borderRadius: scale(20),
-    backgroundColor: "#f8fafc",
+    backgroundColor: "#dbeafe",
     justifyContent: "center",
     alignItems: "center",
     marginRight: moderateScale(12),
@@ -614,7 +452,7 @@ const styles = StyleSheet.create({
     color: "#d1d5db",
   },
 
-  // Enhanced Seats Grid
+  // Simplified Seats Grid
   seatsGrid: {
     flexDirection: "row",
     flexWrap: "wrap",
@@ -623,8 +461,10 @@ const styles = StyleSheet.create({
   },
   seatTile: {
     width: "48%",
+    backgroundColor: "#ffffff",
     borderRadius: scale(20),
     borderWidth: 2,
+    borderColor: "#9370DB",
     marginBottom: verticalScale(16),
     shadowColor: "#000",
     shadowOffset: { width: 0, height: verticalScale(4) },
@@ -633,99 +473,32 @@ const styles = StyleSheet.create({
     elevation: 5,
     overflow: "hidden",
   },
-  // Occupied seat styling (red theme)
-  occupiedSeat: {
-    backgroundColor: "#fef2f2",
-    borderColor: "#dc2626",
-  },
-  // Available seat styling (green theme)
-  availableSeat: {
-    backgroundColor: "#f0fdf4",
-    borderColor: "#16a34a",
-  },
   seatContent: {
-    padding: moderateScale(16),
-  },
-  seatHeader: {
-    flexDirection: "row",
+    padding: moderateScale(20),
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
+    minHeight: scale(120),
+  },
+  seatIconContainer: {
+    width: scale(60),
+    height: scale(60),
+    borderRadius: scale(30),
+    backgroundColor: "#f3f0ff",
+    justifyContent: "center",
+    alignItems: "center",
     marginBottom: verticalScale(12),
   },
   seatNumber: {
-    width: scale(48),
-    height: scale(48),
-    borderRadius: scale(24),
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  seatNumberText: {
-    fontSize: font(16),
+    fontSize: font(18),
     fontWeight: "700",
-    color: "#ffffff",
-  },
-  statusIndicator: {
-    width: scale(12),
-    height: scale(12),
-    borderRadius: scale(6),
-  },
-  customerInfo: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: verticalScale(8),
-  },
-  customerName: {
-    fontSize: font(16),
-    fontWeight: "600",
     color: "#1f2937",
-    marginLeft: moderateScale(6),
-  },
-  timeInfo: {
-    flexDirection: "row",
-    alignItems: "center",
     marginBottom: verticalScale(8),
   },
-  timeText: {
-    fontSize: font(14),
-    color: "#6b7280",
-    marginLeft: moderateScale(6),
-    fontWeight: "500",
-  },
-  servicesContainer: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginBottom: verticalScale(12),
-  },
-  serviceTag: {
-    backgroundColor: "#f3f4f6",
-    paddingHorizontal: moderateScale(8),
-    paddingVertical: verticalScale(4),
-    borderRadius: scale(12),
-    marginRight: moderateScale(6),
-    marginBottom: verticalScale(4),
-  },
-  serviceText: {
+  seatLabel: {
     fontSize: font(12),
     color: "#6b7280",
+    textAlign: "center",
     fontWeight: "500",
-  },
-  statusContainer: {
-    paddingHorizontal: moderateScale(12),
-    paddingVertical: verticalScale(6),
-    borderRadius: scale(12),
-    alignSelf: "flex-start",
-  },
-  occupiedStatus: {
-    backgroundColor: "#fee2e2",
-  },
-  availableStatus: {
-    backgroundColor: "#dcfce7",
-  },
-  statusText: {
-    fontSize: font(12),
-    fontWeight: "700",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
   },
 
   // Scroll Content
