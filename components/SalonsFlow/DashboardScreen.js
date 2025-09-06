@@ -199,7 +199,6 @@ const LandingPage = () => {
                 ? "Fetching salon details..."
                 : "Manage your salon with style ✨"}
             </Text>
-            {shopId && <Text style={styles.userIdText}>Shop ID: {shopId}</Text>}
           </View>
 
           <TouchableOpacity

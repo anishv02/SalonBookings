@@ -257,6 +257,7 @@ const HomeScreen = ({ route }) => {
       }
 
       setLocation(locationData);
+      console.log("locationData", locationData);
       return locationData;
     } catch (err) {
       console.error("Error getting location:", err);
@@ -522,6 +523,7 @@ const HomeScreen = ({ route }) => {
           salonName: item.shopName,
           salonData: item,
           userId: userId,
+          user: user,
         });
       }}
     >

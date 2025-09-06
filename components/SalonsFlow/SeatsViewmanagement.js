@@ -15,6 +15,7 @@ import Icon from "react-native-vector-icons/MaterialIcons";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { jwtDecode } from "jwt-decode";
 import { getToken } from "../../utils/authStorage";
+import axios from "axios";
 import {
   scale,
   verticalScale,
@@ -29,24 +30,100 @@ const font = (size) =>
     ? responsiveFontSize(size * 0.92)
     : responsiveFontSize(size);
 
-// Simplified SeatsView - just show seat numbers, click to see bookings
 const SeatsView = ({ onSeatSelect = () => {}, seatCount }) => {
   const navigation = useNavigation();
   const route = useRoute();
 
   // prefer explicit prop, then route param (from DashboardScreen), then default 8
   const finalSeatCount = Number(seatCount ?? route?.params?.seatCount ?? 8);
+  console.log("Final seat count:", finalSeatCount);
 
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showCalendar, setShowCalendar] = useState(false);
   const [seatsState, setSeatsState] = useState(() =>
     generateSeats(finalSeatCount)
   );
+  const [bookings, setBookings] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     // regenerate seats when seat count changes
     setSeatsState(generateSeats(finalSeatCount));
   }, [finalSeatCount]);
+
+  useEffect(() => {
+    // Fetch bookings when component mounts with current date
+    fetchBookingsByDate(selectedDate);
+  }, []);
+
+  // Fetch bookings from API based on date
+  const fetchBookingsByDate = async (date) => {
+    try {
+      setLoading(true);
+
+      // Get token and decode for shopId
+      const token = await getToken();
+      let decoded = null;
+      if (token) {
+        try {
+          decoded = jwtDecode(token);
+        } catch (err) {
+          console.error("JWT decode failed", err);
+        }
+      }
+
+      // Determine shopId from various sources
+      const shopId =
+        route?.params?.shopId ||
+        decoded?.shopId ||
+        decoded?.salonId ||
+        decoded?.salonObj?._id;
+
+      const userType =
+        decoded?.userType || decoded?.role || decoded?.type || "owner";
+
+      if (!shopId) {
+        console.error("Shop ID not found");
+        setBookings([]); // Set empty array when shopId is not found
+        setLoading(false);
+        return;
+      }
+
+      // Format date as DD-MM-YYYY
+      const formattedDate = date
+        .toLocaleDateString("en-GB", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        })
+        .replace(/\//g, "-");
+
+      console.log("Fetching bookings for shopId:", shopId, "on", formattedDate);
+
+      const response = await axios.get(
+        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/bookings/get-bookings-by-Id",
+        {
+          params: {
+            Id: shopId,
+            userType: userType,
+            date: formattedDate,
+          },
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        }
+      );
+
+      const fetchedBookings = response.data.bookings || response.data || [];
+      setBookings(fetchedBookings);
+    } catch (err) {
+      console.error("Error fetching bookings:", err);
+      setBookings([]); // Set empty array when API fails
+      Alert.alert("Error", "Failed to load bookings. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  console.log("Current bookings state:", bookings);
 
   // Generate calendar dates for current month
   const generateCalendarDates = () => {
@@ -95,19 +172,38 @@ const SeatsView = ({ onSeatSelect = () => {}, seatCount }) => {
     return arr;
   }
 
+  // Filter bookings for a specific seat
+  const getBookingsForSeat = (seatId) => {
+    return bookings.filter((booking) => {
+      const seatStr = booking.seatNumber || booking.seat || "";
+      const match = seatStr.match(/\d+/);
+      if (!match) return false;
+      const seatIndex = parseInt(match[0], 10);
+      return seatIndex === seatId;
+    });
+  };
+
   const handleSeatClick = (seat) => {
     onSeatSelect(seat);
+
+    // Get filtered bookings for this seat
+    const seatBookings = getBookingsForSeat(seat.id);
+
     // Navigate to bookings list for this seat and selected date
     navigation.navigate("CustomersView", {
       selectedSeat: seat.id,
-      selectedDate: selectedDate,
+      selectedDate: selectedDate.toISOString(),
       seatNumber: seat.number,
+      seatCount: finalSeatCount,
+      bookings: seatBookings, // Pass filtered bookings
     });
   };
 
   const handleDateSelect = (date) => {
     setSelectedDate(date);
     setShowCalendar(false);
+    // Fetch bookings for the new selected date
+    fetchBookingsByDate(date);
   };
 
   const isToday = (date) => {
@@ -155,6 +251,15 @@ const SeatsView = ({ onSeatSelect = () => {}, seatCount }) => {
             <View style={styles.statTextContainer}>
               <Text style={styles.statNumber}>{seatsState.length}</Text>
               <Text style={styles.statLabel}>Total Seats</Text>
+            </View>
+          </View>
+          <View style={styles.statCard}>
+            <View style={styles.statIconContainer}>
+              <Icon name="event" size={24} color="#16a34a" />
+            </View>
+            <View style={styles.statTextContainer}>
+              <Text style={styles.statNumber}>{bookings.length}</Text>
+              <Text style={styles.statLabel}>Total Bookings</Text>
             </View>
           </View>
         </View>
@@ -232,27 +337,47 @@ const SeatsView = ({ onSeatSelect = () => {}, seatCount }) => {
           )}
         </View>
 
+        {/* Loading indicator */}
+        {loading && (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading bookings...</Text>
+          </View>
+        )}
+
         {/* Simplified Seats Grid */}
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
           <View style={styles.seatsGrid}>
-            {seatsState.map((seat) => (
-              <TouchableOpacity
-                key={seat.id}
-                onPress={() => handleSeatClick(seat)}
-                style={styles.seatTile}
-              >
-                <View style={styles.seatContent}>
-                  <View style={styles.seatIconContainer}>
-                    <Icon name="event-seat" size={32} color="#9370DB" />
+            {seatsState.map((seat) => {
+              const seatBookings = getBookingsForSeat(seat.id);
+              return (
+                <TouchableOpacity
+                  key={seat.id}
+                  onPress={() => handleSeatClick(seat)}
+                  style={styles.seatTile}
+                >
+                  <View style={styles.seatContent}>
+                    <View style={styles.seatIconContainer}>
+                      <Icon name="event-seat" size={32} color="#9370DB" />
+                    </View>
+                    <Text style={styles.seatNumber}>{seat.number}</Text>
+                    <Text style={styles.seatLabel}>Tap to view bookings</Text>
+                    <Text style={styles.seatBookingCount}>
+                      {seatBookings.length} booking
+                      {seatBookings.length !== 1 ? "s" : ""}
+                    </Text>
+                    <Text style={styles.seatDateLabel}>
+                      {selectedDate.toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
+                    </Text>
                   </View>
-                  <Text style={styles.seatNumber}>{seat.number}</Text>
-                  <Text style={styles.seatLabel}>Tap to view bookings</Text>
-                </View>
-              </TouchableOpacity>
-            ))}
+                </TouchableOpacity>
+              );
+            })}
           </View>
         </ScrollView>
       </View>
@@ -310,10 +435,10 @@ const styles = StyleSheet.create({
     borderRadius: scale(8),
   },
 
-  // Stats Cards - simplified to show only total seats
+  // Stats Cards - updated to show both seats and bookings
   statsContainer: {
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "space-between",
     paddingHorizontal: moderateScale(20),
     paddingVertical: verticalScale(20),
   },
@@ -328,7 +453,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: scale(4),
     elevation: 3,
-    minWidth: scale(150),
+    flex: 1,
+    marginHorizontal: moderateScale(6),
   },
   statIconContainer: {
     width: scale(40),
@@ -351,6 +477,17 @@ const styles = StyleSheet.create({
     fontSize: font(12),
     color: "#6b7280",
     marginTop: verticalScale(2),
+  },
+
+  // Loading
+  loadingContainer: {
+    alignItems: "center",
+    paddingVertical: verticalScale(10),
+  },
+  loadingText: {
+    fontSize: font(14),
+    color: "#6b7280",
+    fontStyle: "italic",
   },
 
   // Beautiful Date Picker
@@ -477,7 +614,7 @@ const styles = StyleSheet.create({
     padding: moderateScale(20),
     alignItems: "center",
     justifyContent: "center",
-    minHeight: scale(120),
+    minHeight: scale(130),
   },
   seatIconContainer: {
     width: scale(60),
@@ -492,13 +629,27 @@ const styles = StyleSheet.create({
     fontSize: font(18),
     fontWeight: "700",
     color: "#1f2937",
-    marginBottom: verticalScale(8),
+    marginBottom: verticalScale(4),
   },
   seatLabel: {
     fontSize: font(12),
     color: "#6b7280",
     textAlign: "center",
     fontWeight: "500",
+    marginBottom: verticalScale(4),
+  },
+  seatBookingCount: {
+    fontSize: font(13),
+    color: "#16a34a",
+    textAlign: "center",
+    fontWeight: "600",
+    marginBottom: verticalScale(4),
+  },
+  seatDateLabel: {
+    fontSize: font(11),
+    color: "#9370DB",
+    textAlign: "center",
+    fontWeight: "600",
   },
 
   // Scroll Content

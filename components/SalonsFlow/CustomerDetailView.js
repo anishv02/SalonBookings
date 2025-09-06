@@ -19,6 +19,7 @@ const CustomerDetailsView = () => {
 
   // Get params from navigation
   const { selectedCustomer, selectedSeat } = route.params || {};
+  console.log("Route params:", route.params);
 
   const calculateTotal = (services) => {
     return services.reduce((total, service) => total + service.price, 0);
@@ -79,7 +80,7 @@ const CustomerDetailsView = () => {
         {/* Enhanced Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.navigate("CustomersView")}
+            onPress={() => navigation.goBack()}
             style={styles.backButton}
           >
             <Icon name="arrow-back" size={24} color="#ffffff" />

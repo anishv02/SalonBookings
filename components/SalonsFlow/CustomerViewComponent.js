@@ -10,95 +10,31 @@ import {
 } from "react-native";
 import Icon from "react-native-vector-icons/MaterialIcons";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { jwtDecode } from "jwt-decode";
-import { getToken } from "../../utils/authStorage";
-import axios from "axios";
 
 const CustomersView = (props) => {
   const navigation = useNavigation();
   const route = useRoute();
+  console.log("Route params:", route.params);
+  console.log("Props:", props);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState("all"); // 'all', 'upcoming', 'completed', 'cancelled'
-  const [bookings, setBookings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [filterType, setFilterType] = useState("upcoming"); // 'all', 'upcoming', 'completed', 'cancelled'
 
-  const selectedSeat = props.selectedSeat || props.route?.params?.selectedSeat;
+  const selectedSeat = props.selectedSeat || route?.params?.selectedSeat;
+  const selectedDateString =
+    props.selectedDate ||
+    route?.params?.selectedDate ||
+    new Date().toISOString();
+  const selectedDate = new Date(selectedDateString);
+  const seatCount = props.seatCount || route?.params?.seatCount || 8;
+
+  // Get bookings passed from SeatsView
+  const bookings = props.bookings || route?.params?.bookings || [];
+  console.log("Bookings prop:", bookings);
+
   console.log("Selected Seat:", selectedSeat);
-
-  // Fetch bookings from API
-  const fetchBookings = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Get token and decode for shopId
-      const token = await getToken();
-      let decoded = null;
-      if (token) {
-        try {
-          decoded = jwtDecode(token);
-        } catch (err) {
-          console.error("JWT decode failed", err);
-        }
-      }
-
-      // Determine shopId from various sources
-      const shopId =
-        route?.params?.shopId ||
-        decoded?.shopId ||
-        decoded?.salonId ||
-        decoded?.salonObj?._id;
-
-      const userType =
-        decoded?.userType || decoded?.role || decoded?.type || "owner";
-
-      if (!shopId) {
-        setError("Shop ID not found");
-        setLoading(false);
-        return;
-      }
-
-      const response = await axios.get(
-        "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/bookings/get-bookings-by-Id",
-        {
-          params: {
-            Id: shopId,
-            userType: userType,
-          },
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        }
-      );
-
-      const fetchedBookings = response.data.bookings || response.data || [];
-      setBookings(fetchedBookings);
-    } catch (err) {
-      console.error("Error fetching bookings:", err);
-      setError("Failed to load bookings. Please try again.");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchBookings();
-  }, []);
-
-  // Filter bookings by selected seat
-  const getSeatBookings = () => {
-    if (!selectedSeat || !bookings.length) {
-      return [];
-    }
-
-    // Filter bookings for the selected seat
-    return bookings.filter((booking) => {
-      const seatStr = booking.seatNumber || booking.seat || "";
-      const match = seatStr.match(/\d+/);
-      if (!match) return false;
-      const seatIndex = parseInt(match[0], 10);
-      return seatIndex === selectedSeat;
-    });
-  };
+  console.log("Selected Date:", selectedDate.toDateString());
+  console.log("Seat Count:", seatCount);
+  console.log("Received Bookings:", bookings.length);
 
   // Transform booking data to match the expected format
   const transformBookingToCustomer = (booking) => {
@@ -106,7 +42,7 @@ const CustomersView = (props) => {
     const endTime = new Date(booking.endTime);
     const now = new Date();
 
-    // Determine status based on timing and booking status
+    // Determine status
     let status;
     if (booking.status === "Cancelled") {
       status = "cancelled";
@@ -115,12 +51,13 @@ const CustomersView = (props) => {
     } else if (startTime > now && booking.status === "Booked") {
       status = "upcoming";
     } else {
-      status = "upcoming"; // default for "Booked" status
+      status = "upcoming";
     }
 
     return {
       id: booking._id,
       name:
+        booking.userName || // ✅ use userName if available
         (booking.user && (booking.user.name || booking.user.displayName)) ||
         (typeof booking.user === "string"
           ? `User ${booking.user.slice(-4)}`
@@ -140,13 +77,12 @@ const CustomersView = (props) => {
       startTime: booking.startTime,
       endTime: booking.endTime,
       seatNumber: booking.seatNumber,
-      originalBooking: booking, // Keep original booking data for navigation
+      originalBooking: booking,
     };
   };
 
   const getFilteredCustomers = () => {
-    const seatBookings = getSeatBookings();
-    const customers = seatBookings
+    const customers = bookings
       .map(transformBookingToCustomer)
       .filter((customer) =>
         customer.name.toLowerCase().includes(searchTerm.toLowerCase().trim())
@@ -163,10 +99,6 @@ const CustomersView = (props) => {
     );
 
     return { upcoming, completed, cancelled };
-  };
-
-  const calculateTotal = (services) => {
-    return services.reduce((total, service) => total + service.price, 0);
   };
 
   const handleCustomerClick = (customer) => {
@@ -296,74 +228,13 @@ const CustomersView = (props) => {
     );
   };
 
-  // Loading state
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("seats")}
-              style={styles.backButton}
-            >
-              <Icon name="arrow-back" size={24} color="#ffffff" />
-            </TouchableOpacity>
-            <View style={styles.headerText}>
-              <Text style={styles.headerTitle}>
-                Seat {selectedSeat} - Appointments
-              </Text>
-              <Text style={styles.headerSubtitle}>Loading...</Text>
-            </View>
-          </View>
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading appointments...</Text>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  // Error state
-  if (error) {
-    return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.container}>
-          <View style={styles.header}>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("seats")}
-              style={styles.backButton}
-            >
-              <Icon name="arrow-back" size={24} color="#ffffff" />
-            </TouchableOpacity>
-            <View style={styles.headerText}>
-              <Text style={styles.headerTitle}>
-                Seat {selectedSeat} - Appointments
-              </Text>
-              <Text style={styles.headerSubtitle}>Error loading data</Text>
-            </View>
-          </View>
-          <View style={styles.errorContainer}>
-            <Icon name="error-outline" size={48} color="#dc2626" />
-            <Text style={styles.errorText}>{error}</Text>
-            <TouchableOpacity
-              style={styles.retryButton}
-              onPress={fetchBookings}
-            >
-              <Text style={styles.retryButtonText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         {/* Enhanced Header */}
         <View style={styles.header}>
           <TouchableOpacity
-            onPress={() => navigation.navigate("seats")}
+            onPress={() => navigation.navigate("seats", { seatCount })}
             style={styles.backButton}
           >
             <Icon name="arrow-back" size={24} color="#ffffff" />
@@ -373,7 +244,12 @@ const CustomersView = (props) => {
               Seat {selectedSeat} - Appointments
             </Text>
             <Text style={styles.headerSubtitle}>
-              Manage customer appointments and services
+              {selectedDate.toLocaleDateString("en-US", {
+                weekday: "long",
+                year: "numeric",
+                month: "long",
+                day: "numeric",
+              })}
             </Text>
           </View>
           <TouchableOpacity style={styles.notificationButton}>
@@ -573,7 +449,14 @@ const CustomersView = (props) => {
                 <Text style={styles.noResultsSubtext}>
                   {searchTerm
                     ? "Try adjusting your search"
-                    : `No bookings for seat ${selectedSeat}`}
+                    : `No bookings for seat ${selectedSeat} on ${selectedDate.toLocaleDateString(
+                        "en-US",
+                        {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        }
+                      )}`}
                 </Text>
               </View>
             )}
@@ -873,40 +756,6 @@ const styles = StyleSheet.create({
     color: "#9370DB",
   },
 
-  // Loading and Error States
-  loadingContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  loadingText: {
-    fontSize: 16,
-    color: "#6b7280",
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    paddingHorizontal: 20,
-  },
-  errorText: {
-    fontSize: 16,
-    color: "#dc2626",
-    textAlign: "center",
-    marginVertical: 15,
-  },
-  retryButton: {
-    backgroundColor: "#9370DB",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-
   // No Results
   noResults: {
     alignItems: "center",
@@ -922,6 +771,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#9ca3af",
     marginTop: 4,
+    textAlign: "center",
   },
 });
 

@@ -12,6 +12,7 @@ import {
   FlatList,
   Modal,
   Platform,
+  Alert,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { Ionicons, FontAwesome5, MaterialIcons } from "@expo/vector-icons";
@@ -21,40 +22,13 @@ const SalonDetailScreen = () => {
   const route = useRoute();
 
   // Get the full salon object from params
-  const { salonData, userId } = route.params || {};
-  console.log("route params", route.params);
+  const { salonData, userId, user } = route.params || {};
   const shopId = salonData?._id;
+  const UserName = user?.name || "Guest";
 
+  // State declarations
   const [services, setServices] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(true);
-
-  // Fetch services for this salon using shopId
-  useEffect(() => {
-    const fetchSalonServices = async () => {
-      if (!shopId) return;
-      setServicesLoading(true);
-      try {
-        const response = await fetch(
-          `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/services/shop/${shopId}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-            },
-          }
-        );
-        const data = await response.json();
-        const salonServices = Array.isArray(data.services) ? data.services : [];
-        setServices(salonServices);
-      } catch (error) {
-        setServices([]);
-      } finally {
-        setServicesLoading(false);
-      }
-    };
-    fetchSalonServices();
-  }, [shopId]);
-
   const [activeTab, setActiveTab] = useState("Services");
   const [cart, setCart] = useState([]);
   const [cartModalVisible, setCartModalVisible] = useState(false);
@@ -70,19 +44,94 @@ const SalonDetailScreen = () => {
   const [morningExpanded, setMorningExpanded] = useState(true);
   const [eveningExpanded, setEveningExpanded] = useState(true);
   const [afternoonExpanded, setAfternoonExpanded] = useState(true);
+  const [bookingInProgress, setBookingInProgress] = useState(false);
+
+  // Timezone utility functions
+  const getLocalDateString = (date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
+  // FIXED: Updated combineDateTime function to handle IST correctly
+  const combineDateTime = (selectedDate, timeString) => {
+    // The timeString is already in UTC format representing IST time
+    // We need to create a date with the selected date but keep the UTC time as-is
+    const slotTime = new Date(timeString);
+
+    // Create new date with selected date
+    const combinedDateTime = new Date(selectedDate);
+
+    // Set the time components from the slot (which are already in the correct timezone)
+    combinedDateTime.setUTCHours(
+      slotTime.getUTCHours(),
+      slotTime.getUTCMinutes(),
+      slotTime.getUTCSeconds(),
+      slotTime.getUTCMilliseconds()
+    );
+
+    return combinedDateTime;
+  };
+
+  // Error handling utility
+  const showError = (message, error = null) => {
+    console.error("Error:", message, error);
+    Alert.alert("Error", message);
+  };
 
   // Tabs for salon details
   const tabs = ["Services", "Reviews", "Portfolio", "Gift Card"];
 
   // Calculate cart total
   const cartTotal = cart.reduce((total, item) => total + item.price, 0);
-  const bookingAmount = 10; // 20% booking amount
+  const bookingAmount = 10; // booking amount
 
   // Calculate total duration of selected services
   const totalDuration = cart.reduce(
     (sum, item) => sum + (item.duration || 0),
     0
   );
+
+  // Fetch services for this salon using shopId
+  useEffect(() => {
+    const fetchSalonServices = async () => {
+      if (!shopId) {
+        setServicesLoading(false);
+        return;
+      }
+
+      setServicesLoading(true);
+
+      try {
+        const response = await fetch(
+          `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/services/shop/${shopId}`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+            },
+          }
+        );
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const salonServices = Array.isArray(data.services) ? data.services : [];
+        setServices(salonServices);
+      } catch (error) {
+        console.error("Services fetch error:", error);
+        showError("Failed to load services. Please try again.");
+        setServices([]);
+      } finally {
+        setServicesLoading(false);
+      }
+    };
+
+    fetchSalonServices();
+  }, [shopId]);
 
   // Helper function to check if service is already in cart
   const isServiceInCart = (serviceId) => {
@@ -93,14 +142,13 @@ const SalonDetailScreen = () => {
   const addToCart = (service) => {
     const serviceId = service._id || service.id;
     if (isServiceInCart(serviceId)) {
-      alert(`${service.name} is already in your cart!`);
+      Alert.alert("Already Added", `${service.name} is already in your cart!`);
       return;
     }
 
-    // Add unique identifier for cart management
     const cartItem = {
       ...service,
-      cartId: `${serviceId}_${Date.now()}`, // Unique cart identifier
+      cartId: `${serviceId}_${Date.now()}`,
     };
     setCart([...cart, cartItem]);
   };
@@ -126,7 +174,10 @@ const SalonDetailScreen = () => {
   // Toggle the checkout modal
   const toggleCheckoutModal = () => {
     if (cart.length === 0) {
-      alert("Your cart is empty. Please add services first.");
+      Alert.alert(
+        "Empty Cart",
+        "Your cart is empty. Please add services first."
+      );
       return;
     }
     setCartModalVisible(false);
@@ -135,80 +186,90 @@ const SalonDetailScreen = () => {
 
   // Toggle the payment modal
   const togglePaymentModal = () => {
+    console.log("proceed", selectedTime);
     if (!selectedTime) {
-      alert("Please select a time slot.");
+      Alert.alert("Time Required", "Please select a time slot.");
       return;
     }
     setCheckoutModalVisible(false);
     setPaymentModalVisible(!paymentModalVisible);
   };
 
-  // Helper: get available dates as Date objects
-  const availableDates = Object.keys(availableSlots).map((d) => new Date(d));
-
-  // Helper: check if a date is available
-  const isDateAvailable = (date) => {
-    const dateStr = date.toISOString().slice(0, 10);
-    return Object.keys(availableSlots).includes(dateStr);
-  };
-
   // Modified onDateChange to only allow available dates
   const onDateChange = (event, selectedDateValue) => {
     const currentDate = selectedDateValue || new Date();
     setShowDatePicker(Platform.OS === "ios");
-    if (isDateAvailable(currentDate)) {
+
+    const selectedDateStr = getLocalDateString(currentDate);
+    const availableDateStrs = Object.keys(availableSlots);
+
+    if (availableDateStrs.includes(selectedDateStr)) {
       setSelectedDate(currentDate);
       setSelectedTime(null); // reset time when date changes
     } else {
-      // Optionally show a message
-      alert("No slots available for this date.");
+      Alert.alert(
+        "No Slots Available",
+        "No slots available for this date. Please select another date."
+      );
     }
   };
 
-  // Update confirmBooking to use the new POST API
+  // FIXED: Updated confirmBooking to handle IST timezone correctly
   const confirmBooking = async () => {
+    if (bookingInProgress) return; // Prevent double booking
+
     try {
-      // Get user from AsyncStorage
+      setBookingInProgress(true);
 
       const userData = userId;
 
       if (!userData) {
-        alert("User not found. Please login again.");
+        showError("User not found. Please login again.");
         return;
       }
 
       if (!selectedTime) {
-        alert("Please select a time slot.");
+        showError("Please select a time slot.");
         return;
       }
 
+      // Get the selected date as a local date string
+      const selectedDateStr = getLocalDateString(selectedDate);
+
       // Find the selected slot object for endTime
+      const slotsForDate = availableSlots[selectedDateStr] || [];
       const slotObj = slotsForDate.find(
         (slot) => slot.startTime === selectedTime
       );
 
       if (!slotObj) {
-        alert("Selected slot not found.");
+        showError("Selected slot not found. Please try again.");
         return;
       }
 
+      // Use the slot times directly as they are already in the correct timezone
       const bookingData = {
         user: userData,
+        userName: UserName,
         shop: salonData._id,
         services: cart.map((s) => ({
           name: s.name,
           price: s.price,
           duration: s.duration,
         })),
-        startTime: slotObj.startTime,
-        endTime: slotObj.endTime,
+        startTime: selectedTime, // Use the slot time directly
+        endTime: slotObj.endTime, // Use the slot end time directly
       };
+
+      console.log("Booking data being sent:", bookingData);
 
       const res = await fetch(
         "https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/bookings/book-slot",
         {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify(bookingData),
         }
       );
@@ -216,16 +277,25 @@ const SalonDetailScreen = () => {
       const data = await res.json();
 
       if (!res.ok) {
-        alert(data.error || "Booking failed");
+        const errorMessage = data.error || data.message || "Booking failed";
+        showError(errorMessage);
         return;
       }
 
       setPaymentModalVisible(false);
+      setCheckoutModalVisible(false);
       setCart([]);
-      alert("Booking confirmed!");
-      // Optionally, navigate to a confirmation screen or show more details
+      setSelectedTime(null);
+      Alert.alert("Success", "Booking confirmed successfully!", [
+        { text: "OK", onPress: () => navigation.goBack() },
+      ]);
     } catch (err) {
-      alert("Error booking slot. Please try again.");
+      const errorMessage =
+        err.message || "Error booking slot. Please try again.";
+      showError(errorMessage);
+      console.error("Booking error:", err);
+    } finally {
+      setBookingInProgress(false);
     }
   };
 
@@ -233,30 +303,43 @@ const SalonDetailScreen = () => {
   useEffect(() => {
     const fetchSlots = async () => {
       if (!salonData._id || !totalDuration || !checkoutModalVisible) return;
+
       setLoadingSlots(true);
       setSlotsError(null);
+
       try {
-        // Use the new GET API for slots
         const url = `https://n78qnwcjfk.execute-api.ap-south-1.amazonaws.com/api/bookings/available-slots?shopId=${salonData._id}&duration=${totalDuration}`;
         const response = await fetch(url);
+
         if (!response.ok) {
-          throw new Error("Failed to fetch slots");
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
+
         const res = await response.json();
+
+        if (!res || !res.results) {
+          throw new Error("Invalid response format");
+        }
+
         setAvailableSlots(res.results || {});
       } catch (err) {
-        setSlotsError("Failed to fetch slots");
+        const errorMessage = err.message || "Failed to fetch slots";
+        setSlotsError(errorMessage);
         setAvailableSlots({});
+        console.error("Slots fetch error:", err);
       } finally {
         setLoadingSlots(false);
       }
     };
+
     fetchSlots();
   }, [salonData._id, totalDuration, selectedDate, checkoutModalVisible]);
 
   // Helper: get slots for selected date
-  const slotsForDate =
-    availableSlots[selectedDate.toISOString().slice(0, 10)] || [];
+  console.log("selectedDate", selectedDate);
+  const slotsForDate = availableSlots[getLocalDateString(selectedDate)] || [];
+
+  console.log("slotsForDate", slotsForDate);
 
   // Render service item with improved cart logic
   const renderServiceItem = ({ item }) => {
@@ -300,7 +383,6 @@ const SalonDetailScreen = () => {
   // Render review item (empty for now)
   const renderReviewItem = ({ item }) => (
     <View style={styles.reviewCard}>
-      {/* Placeholder for review content */}
       <Text style={styles.reviewComment}>No reviews yet.</Text>
     </View>
   );
@@ -326,7 +408,7 @@ const SalonDetailScreen = () => {
     </View>
   );
 
-  // Add these helper functions after the existing helper functions (around line 95)
+  // Add these helper functions after the existing helper functions
   const getAvailableDates = () => {
     const dates = [];
     const today = new Date();
@@ -389,9 +471,6 @@ const SalonDetailScreen = () => {
     }
   };
 
-  console.log("availableslots", availableSlots);
-  console.log("slotsForDate", slotsForDate);
-
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#fff" />
@@ -417,6 +496,7 @@ const SalonDetailScreen = () => {
           )}
         </TouchableOpacity>
       </View>
+
       {/* Salon Info */}
       <View style={styles.salonInfoContainer}>
         <View style={styles.salonNameRow}>
@@ -435,6 +515,7 @@ const SalonDetailScreen = () => {
           </Text>
         </View>
       </View>
+
       {/* Tab Navigation */}
       <View style={styles.tabContainer}>
         {tabs.map((tab) => (
@@ -454,6 +535,7 @@ const SalonDetailScreen = () => {
           </TouchableOpacity>
         ))}
       </View>
+
       {/* Tab Content */}
       <ScrollView
         style={styles.contentContainer}
@@ -730,18 +812,20 @@ const SalonDetailScreen = () => {
                         {slotsForDate
                           .filter(
                             (slot) =>
-                              new Date(slot.startTime).getHours() >= 8 &&
-                              new Date(slot.startTime).getHours() < 12
+                              new Date(slot.startTime).getUTCHours() >= 3 && // 8:30 AM IST = 3:00 AM UTC
+                              new Date(slot.startTime).getUTCHours() < 7 // 12:30 PM IST = 7:00 AM UTC
                           )
                           .map((slot, index) => {
                             const startTime = new Date(slot.startTime);
-                            const timeString = startTime.toLocaleTimeString(
-                              [],
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
+                            // Convert UTC to IST for display
+                            const istTime = new Date(
+                              startTime.getTime() + 5.5 * 60 * 60 * 1000
                             );
+                            const timeString = istTime.toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              timeZone: "UTC", // We already adjusted for IST
+                            });
                             const isSelected = selectedTime === slot.startTime;
 
                             return (
@@ -813,20 +897,21 @@ const SalonDetailScreen = () => {
                         {slotsForDate
                           .filter(
                             (slot) =>
-                              new Date(slot.startTime).getHours() >= 12 &&
-                              new Date(slot.startTime).getHours() < 18
+                              new Date(slot.startTime).getUTCHours() >= 7 && // 12:30 PM IST = 7:00 AM UTC
+                              new Date(slot.startTime).getUTCHours() < 12 // 5:30 PM IST = 12:00 PM UTC
                           )
                           .map((slot, index) => {
                             const startTime = new Date(slot.startTime);
-                            const timeString = startTime.toLocaleTimeString(
-                              [],
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
+                            // Convert UTC to IST for display
+                            const istTime = new Date(
+                              startTime.getTime() + 5.5 * 60 * 60 * 1000
                             );
+                            const timeString = istTime.toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              timeZone: "UTC", // We already adjusted for IST
+                            });
                             const isSelected = selectedTime === slot.startTime;
-
                             return (
                               <TouchableOpacity
                                 key={index}
@@ -892,18 +977,20 @@ const SalonDetailScreen = () => {
                         {slotsForDate
                           .filter(
                             (slot) =>
-                              new Date(slot.startTime).getHours() >= 18 &&
-                              new Date(slot.startTime).getHours() < 22
+                              new Date(slot.startTime).getUTCHours() >= 12 && // 5:30 PM IST = 12:00 PM UTC
+                              new Date(slot.startTime).getUTCHours() < 17 // 10:30 PM IST = 5:00 PM UTC
                           )
                           .map((slot, index) => {
                             const startTime = new Date(slot.startTime);
-                            const timeString = startTime.toLocaleTimeString(
-                              [],
-                              {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              }
+                            // Convert UTC to IST for display
+                            const istTime = new Date(
+                              startTime.getTime() + 5.5 * 60 * 60 * 1000
                             );
+                            const timeString = istTime.toLocaleTimeString([], {
+                              hour: "2-digit",
+                              minute: "2-digit",
+                              timeZone: "UTC", // We already adjusted for IST
+                            });
                             const isSelected = selectedTime === slot.startTime;
 
                             return (
@@ -980,12 +1067,18 @@ const SalonDetailScreen = () => {
                 <Text style={styles.bookingDetailLabel}>Time:</Text>
                 <Text style={styles.bookingDetailValue}>
                   {selectedTime
-                    ? new Date(selectedTime).toLocaleTimeString("en-IN", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hour12: true,
-                        timeZone: "Asia/Kolkata",
-                      })
+                    ? (() => {
+                        const startTime = new Date(selectedTime);
+                        const istTime = new Date(
+                          startTime.getTime() + 5.5 * 60 * 60 * 1000
+                        );
+                        return istTime.toLocaleTimeString([], {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hour12: true,
+                          timeZone: "UTC", // We already adjusted for IST
+                        });
+                      })()
                     : ""}
                 </Text>
               </View>
@@ -1081,11 +1174,17 @@ const SalonDetailScreen = () => {
             </View>
 
             <TouchableOpacity
-              style={styles.confirmPaymentButton}
+              style={[
+                styles.confirmPaymentButton,
+                bookingInProgress && { opacity: 0.7 },
+              ]}
               onPress={confirmBooking}
+              disabled={bookingInProgress}
             >
               <Text style={styles.confirmPaymentButtonText}>
-                {paymentMethod === "online"
+                {bookingInProgress
+                  ? "Processing..."
+                  : paymentMethod === "online"
                   ? `Pay ₹${bookingAmount.toFixed(2)} & Confirm`
                   : "Confirm Booking"}
               </Text>

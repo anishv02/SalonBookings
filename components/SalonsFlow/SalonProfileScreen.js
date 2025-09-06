@@ -421,6 +421,12 @@ const ProfileScreen = ({ route }) => {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backIcon}>‹</Text>
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Profile</Text>
         <View style={styles.placeholder} />
       </View>
